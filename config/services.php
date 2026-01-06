@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'whatsapp' => [
+        'base_url' => env('WHATSAPP_GATEWAY_URL'),
+        'token' => env('WHATSAPP_GATEWAY_TOKEN'),
+        'webhook_token' => env('WHATSAPP_WEBHOOK_TOKEN'),
+    ],
+
 ];

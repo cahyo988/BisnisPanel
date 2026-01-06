@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
         @include('partials.head')
     </head>
-    <body class="min-h-screen bg-white dark:bg-zinc-800">
-        <flux:header container class="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
+    <body class="min-h-screen bg-slate-50 text-neutral-900">
+        <flux:header container class="border-b border-slate-200 bg-white">
             <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" />
 
             <a href="{{ route('dashboard') }}" class="ms-2 me-5 flex items-center space-x-2 rtl:space-x-reverse lg:ms-0" wire:navigate>
@@ -15,7 +15,23 @@
                 <flux:navbar.item icon="layout-grid" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
                     {{ __('Dashboard') }}
                 </flux:navbar.item>
+                <flux:navbar.item icon="device-phone-mobile" :href="route('devices.index')" :current="request()->routeIs('devices.index')" wire:navigate>
+                    {{ __('Devices') }}
+                </flux:navbar.item>
+                <flux:navbar.item icon="chat-bubble-left-right" :href="route('messaging.index')" :current="request()->routeIs('messaging.index')" wire:navigate>
+                    {{ __('Messaging') }}
+                </flux:navbar.item>
+                <flux:navbar.item icon="sparkles" :href="route('automation.index')" :current="request()->routeIs('automation.index')" wire:navigate>
+                    {{ __('Automation') }}
+                </flux:navbar.item>
+                <flux:navbar.item icon="table-cells" :href="route('logs.index')" :current="request()->routeIs('logs.index')" wire:navigate>
+                    {{ __('Logs') }}
+                </flux:navbar.item>
             </flux:navbar>
+
+            <div class="ms-3 hidden lg:flex">
+                <livewire:notification-dropdown />
+            </div>
 
             <flux:spacer />
 
@@ -89,7 +105,7 @@
         </flux:header>
 
         <!-- Mobile Menu -->
-        <flux:sidebar stashable sticky class="lg:hidden border-e border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
+        <flux:sidebar stashable sticky class="lg:hidden border-e border-slate-200 bg-white">
             <flux:sidebar.toggle class="lg:hidden" icon="x-mark" />
 
             <a href="{{ route('dashboard') }}" class="ms-1 flex items-center space-x-2 rtl:space-x-reverse" wire:navigate>
@@ -100,6 +116,18 @@
                 <flux:navlist.group :heading="__('Platform')">
                     <flux:navlist.item icon="layout-grid" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
                     {{ __('Dashboard') }}
+                    </flux:navlist.item>
+                    <flux:navlist.item icon="device-phone-mobile" :href="route('devices.index')" :current="request()->routeIs('devices.index')" wire:navigate>
+                    {{ __('Devices') }}
+                    </flux:navlist.item>
+                    <flux:navlist.item icon="chat-bubble-left-right" :href="route('messaging.index')" :current="request()->routeIs('messaging.index')" wire:navigate>
+                    {{ __('Messaging') }}
+                    </flux:navlist.item>
+                    <flux:navlist.item icon="sparkles" :href="route('automation.index')" :current="request()->routeIs('automation.index')" wire:navigate>
+                    {{ __('Automation') }}
+                    </flux:navlist.item>
+                    <flux:navlist.item icon="table-cells" :href="route('logs.index')" :current="request()->routeIs('logs.index')" wire:navigate>
+                    {{ __('Logs') }}
                     </flux:navlist.item>
                 </flux:navlist.group>
             </flux:navlist>

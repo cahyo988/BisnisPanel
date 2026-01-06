@@ -1,6 +1,9 @@
-<div class="flex aspect-square size-8 items-center justify-center rounded-md bg-accent-content text-accent-foreground">
-    <x-app-logo-icon class="size-5 fill-current text-white dark:text-black" />
-</div>
-<div class="ms-1 grid flex-1 text-start text-sm">
-    <span class="mb-0.5 truncate leading-tight font-semibold">Laravel Starter Kit</span>
+<div class="flex items-center gap-3">
+    <div class="flex size-10 items-center justify-center rounded-xl bg-slate-900 text-white">
+        <x-app-logo-icon class="size-5" />
+    </div>
+    <div class="grid text-sm leading-tight">
+        <span class="font-semibold text-neutral-900">BisnisPanel</span>
+        <span class="text-xs text-neutral-500">{{ __('WhatsApp Control Center') }}</span>
+    </div>
 </div>

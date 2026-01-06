@@ -12,6 +12,13 @@ Route::view('dashboard', 'dashboard')
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
 
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::view('devices', 'devices.index')->name('devices.index');
+    Route::view('messaging', 'messaging.index')->name('messaging.index');
+    Route::view('automation', 'automation.index')->name('automation.index');
+    Route::view('logs', 'logs.index')->name('logs.index');
+});
+
 Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', 'settings/profile');
 
