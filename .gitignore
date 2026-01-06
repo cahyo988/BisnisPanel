@@ -9,6 +9,9 @@
 .env
 .env.backup
 .env.production
+/wa-gateway/.env
+/wa-gateway/sessions
+/wa-gateway/node_modules
 .phpactor.json
 .phpunit.result.cache
 Homestead.json

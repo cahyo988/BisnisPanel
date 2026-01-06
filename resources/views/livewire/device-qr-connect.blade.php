@@ -1,11 +1,11 @@
-<div class="panel-card text-center">
+﻿<div class="panel-card text-center">
     <h3 class="panel-section-title">{{ __('QR Connection') }}</h3>
     <p class="panel-section-subtitle">{{ __('Select a device to reveal its latest QR code.') }}</p>
 
     @if ($device)
         <div class="mt-5 space-y-4">
             <p class="text-sm text-neutral-500">
-                {{ __('Scan this code with WhatsApp to connect “:name”.', ['name' => $device->name]) }}
+                {{ __('Scan this code with WhatsApp to connect ":name".', ['name' => $device->name]) }}
             </p>
 
             @if ($qrSvg)
@@ -18,7 +18,7 @@
                 </div>
             @endif
 
-            <flux:button variant="secondary" wire:click="clear">{{ __('Close preview') }}</flux:button>
+            <flux:button variant="outline" wire:click="clear">{{ __('Close preview') }}</flux:button>
         </div>
     @else
         <div class="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-neutral-500">

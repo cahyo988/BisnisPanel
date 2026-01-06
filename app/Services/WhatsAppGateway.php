@@ -44,6 +44,62 @@ class WhatsAppGateway
         return $response->json() ?? Arr::wrap($response->body());
     }
 
+    /**
+     * Ask the gateway to start a device session and emit a QR payload.
+     *
+     * @return array<mixed>
+     */
+    public function connectDevice(int $deviceId, ?string $devicePhone, ?string $name = null): array
+    {
+        $payload = [
+            'device_id' => $deviceId,
+            'device_phone' => $devicePhone,
+            'name' => $name,
+        ];
+
+        $baseUrl = config('services.whatsapp.base_url');
+
+        if (blank($baseUrl)) {
+            return [
+                'driver' => 'mock',
+                'payload' => $payload,
+            ];
+        }
+
+        $response = $this->client()
+            ->post('/devices/connect', $payload)
+            ->throw();
+
+        return $response->json() ?? Arr::wrap($response->body());
+    }
+
+    /**
+     * Disconnect a device session from the gateway.
+     *
+     * @return array<mixed>
+     */
+    public function disconnectDevice(int $deviceId): array
+    {
+        $payload = [
+            'device_id' => $deviceId,
+        ];
+
+        $baseUrl = config('services.whatsapp.base_url');
+
+        if (blank($baseUrl)) {
+            return [
+                'driver' => 'mock',
+                'payload' => $payload,
+            ];
+        }
+
+        $response = $this->client()
+            ->post('/devices/disconnect', $payload)
+            ->throw();
+
+        return $response->json() ?? Arr::wrap($response->body());
+    }
+
     private function client(): PendingRequest
     {
         $request = $this->http->baseUrl(config('services.whatsapp.base_url'))
@@ -56,4 +112,3 @@ class WhatsAppGateway
         return $request;
     }
 }
-

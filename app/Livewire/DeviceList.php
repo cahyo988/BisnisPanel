@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\User;
 use App\Models\WhatsAppDevice;
+use App\Services\WhatsAppGateway;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -69,7 +70,7 @@ class DeviceList extends Component
         $this->dispatch('device-removed');
     }
 
-    public function showQr(int $deviceId): void
+    public function showQr(WhatsAppGateway $gateway, int $deviceId): void
     {
         $device = WhatsAppDevice::query()
             ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
@@ -77,7 +78,22 @@ class DeviceList extends Component
 
         $this->authorize('view', $device);
 
+        $gateway->connectDevice($device->id, $device->phone_number, $device->name);
+
         $this->dispatch('qr-device-selected', deviceId: $device->id);
+    }
+
+    public function disconnect(WhatsAppGateway $gateway, int $deviceId): void
+    {
+        $device = WhatsAppDevice::query()
+            ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
+            ->findOrFail($deviceId);
+
+        $this->authorize('update', $device);
+
+        $gateway->disconnectDevice($device->id);
+
+        session()->flash('device_removed', __('Device disconnected. Refreshing status...'));
     }
 
     private function applyUserScope(Builder $builder): Builder

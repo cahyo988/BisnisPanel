@@ -1,4 +1,4 @@
-<div class="panel-card">
+<div class="panel-card" wire:poll.5s>
     <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
             <h3 class="panel-section-title">{{ __('WhatsApp Devices') }}</h3>
@@ -46,7 +46,14 @@
                 </div>
 
                 <div class="flex flex-wrap gap-3">
-                    <flux:button wire:click="showQr({{ $device->id }})" variant="secondary">{{ __('Show QR') }}</flux:button>
+                    <flux:button wire:click="showQr({{ $device->id }})" variant="outline">{{ __('Show QR') }}</flux:button>
+                    <flux:button
+                        wire:click="disconnect({{ $device->id }})"
+                        variant="outline"
+                        :disabled="$device->status !== 'connected'"
+                    >
+                        {{ __('Disconnect') }}
+                    </flux:button>
                     <flux:button wire:click="remove({{ $device->id }})" variant="danger">{{ __('Remove') }}</flux:button>
                 </div>
             </div>

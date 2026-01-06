@@ -7,41 +7,67 @@
         <flux:sidebar sticky stashable class="border-e border-slate-200 bg-white px-6 py-4">
             <flux:sidebar.toggle class="lg:hidden" icon="x-mark" />
 
-            <a href="{{ route('dashboard') }}" class="me-3 flex items-center space-x-2 rounded-xl border border-slate-200 px-3 py-2" wire:navigate>
-                <x-app-logo />
+            <a href="{{ route('dashboard') }}" class="me-3 flex items-center space-x-2 rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-3 shadow-sm" wire:navigate>
+                <div class="flex size-10 items-center justify-center rounded-xl bg-slate-900 text-white">
+                    <x-app-logo-icon class="size-5" />
+                </div>
+                <div class="grid text-sm leading-tight">
+                    <span class="font-semibold text-slate-900">BPanel</span>
+                    <span class="text-xs text-slate-500">{{ __('WhatsApp Ops') }}</span>
+                </div>
             </a>
 
-            <nav class="mt-6 space-y-1 text-sm font-medium text-neutral-600">
-                <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500">{{ __('Overview') }}</p>
-                <a href="{{ route('dashboard') }}" @class([
-                    'flex items-center gap-3 rounded-xl px-3 py-2 transition-colors',
-                    'bg-slate-100 text-slate-900' => request()->routeIs('dashboard'),
-                    'text-neutral-600 hover:bg-slate-50' => ! request()->routeIs('dashboard'),
-                ]) wire:navigate>
-                    <span class="inline-block size-2 rounded-full @if(request()->routeIs('dashboard')) bg-slate-700 @else bg-slate-300 @endif"></span>
-                    {{ __('Dashboard') }}
-                </a>
-                <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-neutral-500">{{ __('Operations') }}</p>
-                @foreach ([
-                    ['route' => 'devices.index', 'label' => __('Devices')],
-                    ['route' => 'messaging.index', 'label' => __('Messaging')],
-                    ['route' => 'automation.index', 'label' => __('Automation')],
-                    ['route' => 'logs.index', 'label' => __('Logs')],
-                ] as $item)
-                    <a href="{{ route($item['route']) }}" @class([
-                        'flex items-center gap-3 rounded-xl px-3 py-2 transition-colors',
-                        'bg-slate-100 text-slate-900' => request()->routeIs($item['route']),
-                        'text-neutral-600 hover:bg-slate-50' => ! request()->routeIs($item['route']),
+            <nav class="mt-6 space-y-4 text-sm font-medium text-neutral-600">
+                <div class="space-y-1">
+                    <div class="flex items-center justify-between px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <span>{{ __('Overview') }}</span>
+                        @if (auth()->user()->isAdmin())
+                            <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">{{ __('Admin') }}</span>
+                        @endif
+                    </div>
+                    <a href="{{ route('dashboard') }}" @class([
+                        'flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-all',
+                        'bg-slate-900 text-white shadow-sm' => request()->routeIs('dashboard'),
+                        'text-neutral-600 hover:bg-slate-50' => ! request()->routeIs('dashboard'),
                     ]) wire:navigate>
-                        <span class="inline-block size-2 rounded-full @if(request()->routeIs($item['route'])) bg-slate-700 @else bg-slate-300 @endif"></span>
-                        {{ $item['label'] }}
+                        <span class="inline-block size-2 rounded-full @if(request()->routeIs('dashboard')) bg-amber-400 @else bg-slate-300 @endif"></span>
+                        {{ __('Dashboard') }}
                     </a>
-                @endforeach
+                    @if (auth()->user()->isAdmin())
+                        <a href="{{ route('admin.dashboard') }}" @class([
+                            'flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-all',
+                            'bg-slate-900 text-white shadow-sm' => request()->routeIs('admin.dashboard'),
+                            'text-neutral-600 hover:bg-slate-50' => ! request()->routeIs('admin.dashboard'),
+                        ]) wire:navigate>
+                            <span class="inline-block size-2 rounded-full @if(request()->routeIs('admin.dashboard')) bg-amber-400 @else bg-slate-300 @endif"></span>
+                            {{ __('Admin Dashboard') }}
+                        </a>
+                    @endif
+                </div>
+
+                <div class="space-y-1">
+                    <p class="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('Operations') }}</p>
+                    @foreach ([
+                        ['route' => 'devices.index', 'label' => __('Devices')],
+                        ['route' => 'messaging.index', 'label' => __('Messaging')],
+                        ['route' => 'automation.index', 'label' => __('Automation')],
+                        ['route' => 'logs.index', 'label' => __('Logs')],
+                    ] as $item)
+                        <a href="{{ route($item['route']) }}" @class([
+                            'flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-all',
+                            'bg-slate-100 text-slate-900' => request()->routeIs($item['route']),
+                            'text-neutral-600 hover:bg-slate-50' => ! request()->routeIs($item['route']),
+                        ]) wire:navigate>
+                            <span class="inline-block size-2 rounded-full @if(request()->routeIs($item['route'])) bg-slate-700 @else bg-slate-300 @endif"></span>
+                            {{ $item['label'] }}
+                        </a>
+                    @endforeach
+                </div>
             </nav>
 
             <div class="mt-8 space-y-2">
                 <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500">{{ __('Notifications') }}</p>
-                <div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <div class="rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
                     <livewire:notification-dropdown />
                 </div>
             </div>
@@ -50,9 +76,9 @@
 
             <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <p class="text-sm font-semibold text-neutral-900">{{ __('Need help?') }}</p>
-                <p class="mt-1 text-xs text-neutral-500">{{ __('Check deployment docs inside your repo.') }}</p>
-                <a href="https://github.com/laravel/livewire-starter-kit" target="_blank" class="mt-3 inline-flex items-center text-sm font-semibold text-slate-700 hover:underline">
-                    {{ __('View documentation') }}
+                <p class="mt-1 text-xs text-neutral-500">{{ __('Review the guide and support checklist on the homepage.') }}</p>
+                <a href="{{ route('home') }}#support" class="mt-3 inline-flex items-center text-sm font-semibold text-slate-700 hover:underline">
+                    {{ __('Open support guide') }}
                 </a>
             </div>
 
@@ -98,7 +124,7 @@
                         </flux:menu.item>
                     </form>
                 </flux:menu>
-            </flux:navlist.group>
+            </flux:dropdown>
         </flux:sidebar>
 
         <!-- Mobile User Menu -->

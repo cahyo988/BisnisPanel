@@ -3,7 +3,7 @@
         <x-app-logo-icon class="size-5" />
     </div>
     <div class="grid text-sm leading-tight">
-        <span class="font-semibold text-neutral-900">BisnisPanel</span>
-        <span class="text-xs text-neutral-500">{{ __('WhatsApp Control Center') }}</span>
+        <span class="font-semibold text-neutral-900">BPanel</span>
+        <span class="text-xs text-neutral-500">{{ __('WhatsApp Operations') }}</span>
     </div>
 </div>

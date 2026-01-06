@@ -1,4 +1,4 @@
-<div class="panel-card">
+﻿<div class="panel-card">
     <h3 class="panel-section-title">{{ __('Auto Reply Rules') }}</h3>
     <p class="panel-section-subtitle">{{ __('Define keyword-based responses per device.') }}</p>
 
@@ -13,7 +13,7 @@
             <div>
                 <label class="text-sm font-medium text-neutral-700">{{ __('Device') }}</label>
                 <select wire:model="deviceId" class="panel-select mt-1">
-                    <option value="">{{ __('Select device…') }}</option>
+                    <option value="">{{ __('Select device...') }}</option>
                     @foreach ($devices as $device)
                         <option value="{{ $device->id }}">{{ $device->name }}</option>
                     @endforeach
@@ -50,7 +50,7 @@
 
         <div>
             <label class="text-sm font-medium text-neutral-700">{{ __('Reply Message') }}</label>
-            <textarea wire:model.defer="replyText" rows="4" class="panel-input mt-1" placeholder="{{ __('Hello, thanks for reaching out…') }}"></textarea>
+            <textarea wire:model.defer="replyText" rows="4" class="panel-input mt-1" placeholder="{{ __('Hello, thanks for reaching out...') }}"></textarea>
             @error('replyText') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
         </div>
 
@@ -82,7 +82,7 @@
                             <span class="panel-pill {{ $rule->is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600' }}">
                                 {{ $rule->is_active ? __('Active') : __('Paused') }}
                             </span>
-                            <flux:button size="sm" variant="secondary" wire:click="toggle({{ $rule->id }})">
+                            <flux:button size="sm" variant="outline" wire:click="toggle({{ $rule->id }})">
                                 {{ $rule->is_active ? __('Pause') : __('Activate') }}
                             </flux:button>
                             <flux:button size="sm" wire:click="edit({{ $rule->id }})">{{ __('Edit') }}</flux:button>

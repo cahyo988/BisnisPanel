@@ -9,7 +9,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-sans: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
     --color-zinc-50: #fafafa;
     --color-zinc-100: #f5f5f5;
@@ -40,9 +40,13 @@
 
     :root {
         --panel-surface: #ffffff;
-        --panel-muted: #f5f7fb;
-        --panel-border: #e5e7eb;
-        --panel-text: #111827;
+        --panel-muted: #f4f6fb;
+        --panel-border: #e1e4ee;
+        --panel-text: #0f172a;
+        --brand-ink: #0b1b30;
+        --brand-accent: #ff7a1a;
+        --brand-accent-strong: #e85f00;
+        --brand-glow: rgba(255, 122, 26, 0.24);
     }
 
     body {
@@ -85,6 +89,29 @@
     }
 }
 
+@layer utilities {
+    .hero-surface {
+        background-image: radial-gradient(circle at top, rgba(255, 122, 26, 0.18), transparent 55%),
+            radial-gradient(circle at 15% 20%, rgba(16, 38, 64, 0.25), transparent 45%),
+            linear-gradient(180deg, #f7f8fc 0%, #ffffff 45%, #f8fafc 100%);
+    }
+
+    .hero-glow {
+        box-shadow: 0 24px 80px -32px var(--brand-glow);
+    }
+
+    .glass-panel {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.72));
+        border: 1px solid rgba(255, 255, 255, 0.65);
+        box-shadow: 0 24px 60px -40px rgba(15, 23, 42, 0.4);
+    }
+
+    .grid-dots {
+        background-image: radial-gradient(rgba(15, 23, 42, 0.08) 1px, transparent 1px);
+        background-size: 18px 18px;
+    }
+}
+
 [data-flux-field]:not(ui-radio, ui-checkbox) {
     @apply grid gap-2;
 }
@@ -97,6 +124,11 @@ input:focus[data-flux-control],
 textarea:focus[data-flux-control],
 select:focus[data-flux-control] {
     @apply outline-hidden ring-2 ring-accent ring-offset-2 ring-offset-accent-foreground;
+}
+
+[data-flux-control] {
+    border-color: #d1d5db;
+    background-color: #ffffff;
 }
 
 /* \[:where(&)\]:size-4 {

@@ -19,6 +19,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::view('logs', 'logs.index')->name('logs.index');
 });
 
+Route::middleware(['auth', 'verified', 'admin'])->group(function () {
+    Route::view('admin', 'admin.dashboard')->name('admin.dashboard');
+});
+
 Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', 'settings/profile');
 
