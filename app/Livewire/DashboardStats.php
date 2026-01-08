@@ -43,46 +43,57 @@ class DashboardStats extends Component
      */
     private function buildStats(?User $targetUser): array
     {
-        $devicesQuery = WhatsAppDevice::query();
-        $messagesQuery = MessageLog::query();
-        $failedQuery = MessageLog::query()->where('status', MessageLog::STATUS_FAILED);
-        $incomingQuery = MessageLog::query()
-            ->where('direction', MessageLog::DIRECTION_INCOMING)
-            ->whereDate('created_at', Carbon::today());
+        $deviceBase = WhatsAppDevice::query();
+        $this->applyUserFilter($deviceBase, $targetUser);
+        $devicesTotal = (clone $deviceBase)->count();
+        $devicesCreatedToday = (clone $deviceBase)->whereDate('created_at', Carbon::today())->count();
+        $devicesPrevious = max($devicesTotal - $devicesCreatedToday, 0);
 
-        collect([$devicesQuery, $messagesQuery, $failedQuery, $incomingQuery])
-            ->each(fn (Builder $builder) => $this->applyUserFilter($builder, $targetUser));
-
-        $outgoingToday = $messagesQuery
+        $outgoingBase = MessageLog::query()
             ->where('direction', MessageLog::DIRECTION_OUTGOING)
             ->whereIn('status', [
                 MessageLog::STATUS_SENT,
                 MessageLog::STATUS_DELIVERED,
                 MessageLog::STATUS_READ,
-            ])
-            ->whereDate('created_at', Carbon::today())
-            ->count();
+            ]);
+        $this->applyUserFilter($outgoingBase, $targetUser);
+        $outgoingToday = (clone $outgoingBase)->whereDate('created_at', Carbon::today())->count();
+        $outgoingYesterday = (clone $outgoingBase)->whereDate('created_at', Carbon::yesterday())->count();
+
+        $failedBase = MessageLog::query()->where('status', MessageLog::STATUS_FAILED);
+        $this->applyUserFilter($failedBase, $targetUser);
+        $failedToday = (clone $failedBase)->whereDate('created_at', Carbon::today())->count();
+        $failedYesterday = (clone $failedBase)->whereDate('created_at', Carbon::yesterday())->count();
+
+        $incomingBase = MessageLog::query()->where('direction', MessageLog::DIRECTION_INCOMING);
+        $this->applyUserFilter($incomingBase, $targetUser);
+        $incomingToday = (clone $incomingBase)->whereDate('created_at', Carbon::today())->count();
+        $incomingYesterday = (clone $incomingBase)->whereDate('created_at', Carbon::yesterday())->count();
 
         return [
             [
                 'label' => 'WhatsApp Devices',
-                'value' => $devicesQuery->count(),
+                'value' => $devicesTotal,
                 'description' => 'Total devices connected for this view.',
+                'trend' => $this->formatTrend($devicesTotal, $devicesPrevious),
             ],
             [
                 'label' => 'Messages Sent Today',
                 'value' => $outgoingToday,
                 'description' => 'Successful outgoing messages in the last 24 hours.',
+                'trend' => $this->formatTrend($outgoingToday, $outgoingYesterday),
             ],
             [
                 'label' => 'Failed Messages',
-                'value' => $failedQuery->count(),
-                'description' => 'Messages that failed to send.',
+                'value' => $failedToday,
+                'description' => 'Messages that failed to send (today).',
+                'trend' => $this->formatTrend($failedToday, $failedYesterday),
             ],
             [
                 'label' => 'Incoming Today',
-                'value' => $incomingQuery->count(),
+                'value' => $incomingToday,
                 'description' => 'Incoming device messages captured today.',
+                'trend' => $this->formatTrend($incomingToday, $incomingYesterday),
             ],
         ];
     }
@@ -101,5 +112,29 @@ class DashboardStats extends Component
             $builder->where('user_id', $viewer->id);
         }
     }
-}
 
+    /**
+     * @return array{direction: string, value: float, caption: string}
+     */
+    private function formatTrend(int $current, int $previous): array
+    {
+        $difference = $current - $previous;
+
+        $direction = 'neutral';
+        if ($difference > 0) {
+            $direction = 'up';
+        } elseif ($difference < 0) {
+            $direction = 'down';
+        }
+
+        $percentage = $previous === 0
+            ? ($current > 0 ? 100.0 : 0.0)
+            : round(abs($difference) / max($previous, 1) * 100, 1);
+
+        return [
+            'direction' => $direction,
+            'value' => $percentage,
+            'caption' => __('vs previous period'),
+        ];
+    }
+}

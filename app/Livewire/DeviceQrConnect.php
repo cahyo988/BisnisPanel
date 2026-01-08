@@ -10,6 +10,7 @@ use BaconQrCode\Writer;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -24,43 +25,38 @@ class DeviceQrConnect extends Component
     #[On('show-qr-modal')]
     public function showQrModal(int $deviceId): void
     {
-        \Illuminate\Support\Facades\Log::info('DeviceQrConnect: showQrModal called', [
+        Log::info('DeviceQrConnect: showQrModal called', [
             'device_id' => $deviceId,
         ]);
 
-        $device = WhatsAppDevice::query()
-            ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
-            ->where('id', $deviceId)
-            ->first();
-
-        if (! $device) {
-            \Illuminate\Support\Facades\Log::warning('DeviceQrConnect: Device not found', [
-                'device_id' => $deviceId,
-            ]);
+        if (! $this->loadDevice($deviceId)) {
             return;
         }
 
-        $this->authorize('view', $device);
-
-        $this->device = $device->fresh();
-        $this->qrSvg = $this->generateQr($device);
         $this->showModal = true;
-        
-        \Illuminate\Support\Facades\Log::info('DeviceQrConnect: Modal opened', [
-            'device_id' => $this->device->id,
-            'qrSvg_exists' => !is_null($this->qrSvg),
+
+        Log::info('DeviceQrConnect: Modal opened', [
+            'device_id' => $this->device?->id,
+            'qrSvg_exists' => filled($this->qrSvg),
         ]);
+    }
+
+    public function pollQrStatus(): void
+    {
+        if (! $this->showModal || $this->qrSvg || ! $this->device?->id) {
+            return;
+        }
+
+        $this->loadDevice($this->device->id);
     }
 
     public function closeModal(): void
     {
-        \Illuminate\Support\Facades\Log::info('DeviceQrConnect: closeModal called');
-        
-        $this->showModal = false;
-        $this->device = null;
-        $this->qrSvg = null;
-        
-        \Illuminate\Support\Facades\Log::info('DeviceQrConnect: Modal closed', [
+        Log::info('DeviceQrConnect: closeModal called');
+
+        $this->reset(['showModal', 'device', 'qrSvg']);
+
+        Log::info('DeviceQrConnect: Modal closed', [
             'showModal' => $this->showModal,
         ]);
     }
@@ -81,29 +77,37 @@ class DeviceQrConnect extends Component
         return $builder->where('user_id', $viewer->id);
     }
 
-    public function refresh(): void
+    private function loadDevice(int $deviceId): bool
     {
-        // Stop refreshing if QR is already displayed
-        if ($this->qrSvg) {
-            return;
+        $device = WhatsAppDevice::query()
+            ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
+            ->find($deviceId);
+
+        if (! $device) {
+            Log::warning('DeviceQrConnect: Device not found', [
+                'device_id' => $deviceId,
+            ]);
+
+            return false;
         }
-        
-        // Only refresh if we have a device selected
-        if ($this->device) {
-            $this->loadDevice($this->device->id);
-        }
+
+        $this->authorize('view', $device);
+
+        $this->device = $device->fresh();
+        $this->qrSvg = $this->generateQr($this->device);
+
+        return true;
     }
 
     private function generateQr(WhatsAppDevice $device): ?string
     {
-        \Illuminate\Support\Facades\Log::info('DeviceQrConnect: generateQr started', [
+        Log::info('DeviceQrConnect: generateQr started', [
             'device_id' => $device->id,
             'device_name' => $device->name,
         ]);
-        
+
         $session = $device->session;
 
-        // Handle potential string format (if casting fails or double encoded)
         if (is_string($session)) {
             $decoded = json_decode($session, true);
             if (json_last_error() === JSON_ERROR_NONE) {
@@ -136,4 +140,3 @@ class DeviceQrConnect extends Component
         }
     }
 }
-

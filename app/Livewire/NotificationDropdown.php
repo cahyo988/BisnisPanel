@@ -39,12 +39,19 @@ class NotificationDropdown extends Component
             ->update(['read_at' => now()]);
     }
 
+    public $limit = 2;
+
+    public function loadMore(): void
+    {
+        $this->limit += 5;
+    }
+
     public function getNotificationsProperty()
     {
         return PanelNotification::query()
             ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
             ->latest()
-            ->limit(8)
+            ->limit($this->limit)
             ->get();
     }
 

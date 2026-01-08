@@ -69,6 +69,8 @@ class BaileysWebhookController extends Controller
             return response()->json(['status' => 'ignored', 'message' => 'Device not found'], 200);
         }
 
+        $previousStatus = $device->status;
+
         $device->fill([
             'status' => $data['status'],
             'session' => $data['session'] ?? $device->session,
@@ -77,12 +79,14 @@ class BaileysWebhookController extends Controller
         ]);
         $device->save();
 
-        PanelNotification::create([
-            'user_id' => $device->user_id,
-            'title' => sprintf('Device %s is now %s', $device->name, $device->status),
-            'body' => sprintf('Phone %s reported a %s status update.', $device->phone_number, $device->status),
-            'type' => 'device',
-        ]);
+        if ($previousStatus !== $device->status) {
+            PanelNotification::create([
+                'user_id' => $device->user_id,
+                'title' => sprintf('Device %s is now %s', $device->name, $device->status),
+                'body' => sprintf('Phone %s reported a %s status update.', $device->phone_number, $device->status),
+                'type' => 'device',
+            ]);
+        }
 
         return response()->json(['status' => 'ok']);
     }

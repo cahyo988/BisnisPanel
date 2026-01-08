@@ -1,187 +1,213 @@
+@props(['title' => null])
+
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
         @include('partials.head')
     </head>
-    <body class="min-h-screen bg-slate-50 text-neutral-900">
-        <flux:sidebar sticky stashable class="border-e border-slate-200 bg-white px-6 py-4">
-            <flux:sidebar.toggle class="lg:hidden" icon="x-mark" />
-
-            <a href="{{ route('dashboard') }}" class="me-3 flex items-center space-x-2 rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-3 shadow-sm" wire:navigate>
-                <div class="flex size-10 items-center justify-center rounded-xl bg-slate-900 text-white">
-                    <x-app-logo-icon class="size-5" />
-                </div>
-                <div class="grid text-sm leading-tight">
-                    <span class="font-semibold text-slate-900">BPanel</span>
-                    <span class="text-xs text-slate-500">{{ __('WhatsApp Ops') }}</span>
-                </div>
-            </a>
-
-            <nav class="mt-6 space-y-4 text-sm font-medium text-neutral-600">
-                <div class="space-y-1">
-                    <div class="flex items-center justify-between px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <span>{{ __('Overview') }}</span>
-                        @if (auth()->user()->isAdmin())
-                            <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">{{ __('Admin') }}</span>
-                        @endif
-                    </div>
-                    <a href="{{ route('dashboard') }}" @class([
-                        'flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-all',
-                        'bg-slate-900 text-white shadow-sm' => request()->routeIs('dashboard'),
-                        'text-neutral-600 hover:bg-slate-50' => ! request()->routeIs('dashboard'),
-                    ]) wire:navigate>
-                        <span class="inline-block size-2 rounded-full @if(request()->routeIs('dashboard')) bg-amber-400 @else bg-slate-300 @endif"></span>
-                        {{ __('Dashboard') }}
+    @php
+        $user = auth()->user();
+        $operationLinks = [
+            ['route' => 'devices.index', 'label' => __('Devices')],
+            ['route' => 'messaging.index', 'label' => __('Messaging')],
+            ['route' => 'automation.index', 'label' => __('Automation')],
+            ['route' => 'logs.index', 'label' => __('Logs')],
+        ];
+    @endphp
+    <body class="antialiased" x-data="{ sidebarCollapsed: false }">
+        <div class="dashboard-shell">
+            <aside
+                class="app-sidebar hidden lg:flex"
+                :class="{
+                    'app-sidebar--collapsed': sidebarCollapsed
+                }"
+            >
+                <div class="mb-6 flex items-center justify-between lg:justify-start">
+                    <a href="{{ route('dashboard') }}" class="app-sidebar__logo" wire:navigate>
+                        <div class="flex size-10 items-center justify-center rounded-2xl bg-white/10">
+                            <x-app-logo-icon class="size-5 text-white" />
+                        </div>
+                        <div class="sidebar-collapse-hidden">
+                            <p class="text-base font-semibold">BisnisPanel</p>
+                            <p class="text-xs text-white/70">{{ __('Enterprise Suite') }}</p>
+                        </div>
                     </a>
-                    @if (auth()->user()->isAdmin())
-                        <a href="{{ route('admin.dashboard') }}" @class([
-                            'flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-all',
-                            'bg-slate-900 text-white shadow-sm' => request()->routeIs('admin.dashboard'),
-                            'text-neutral-600 hover:bg-slate-50' => ! request()->routeIs('admin.dashboard'),
-                        ]) wire:navigate>
-                            <span class="inline-block size-2 rounded-full @if(request()->routeIs('admin.dashboard')) bg-amber-400 @else bg-slate-300 @endif"></span>
-                            {{ __('Admin Dashboard') }}
+                </div>
+
+                <div class="sidebar-nav-section">
+                    <p class="sidebar-nav-label sidebar-collapse-hidden">{{ __('Overview') }}</p>
+                    <nav class="space-y-2">
+                        <a href="{{ route('dashboard') }}"
+                            @class([
+                                'sidebar-nav-link',
+                                'sidebar-nav-link--active' => request()->routeIs('dashboard'),
+                            ])
+                            wire:navigate
+                            title="{{ __('Dashboard') }}"
+                        >
+                            <span class="inline-flex size-2 rounded-full bg-white/70"></span>
+                            <span class="sidebar-text">{{ __('Dashboard') }}</span>
                         </a>
-                    @endif
+
+                        @if ($user->isAdmin())
+                            <a href="{{ route('admin.dashboard') }}"
+                                @class([
+                                    'sidebar-nav-link',
+                                    'sidebar-nav-link--active' => request()->routeIs('admin.dashboard'),
+                                ])
+                                wire:navigate
+                                title="{{ __('Admin Overview') }}"
+                            >
+                                <span class="inline-flex size-2 rounded-full bg-white/70"></span>
+                                <span class="sidebar-text">{{ __('Admin Overview') }}</span>
+                            </a>
+                        @endif
+                    </nav>
                 </div>
 
-                <div class="space-y-1">
-                    <p class="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('Operations') }}</p>
-                    @foreach ([
-                        ['route' => 'devices.index', 'label' => __('Devices')],
-                        ['route' => 'messaging.index', 'label' => __('Messaging')],
-                        ['route' => 'automation.index', 'label' => __('Automation')],
-                        ['route' => 'logs.index', 'label' => __('Logs')],
-                    ] as $item)
-                        <a href="{{ route($item['route']) }}" @class([
-                            'flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-all',
-                            'bg-slate-100 text-slate-900' => request()->routeIs($item['route']),
-                            'text-neutral-600 hover:bg-slate-50' => ! request()->routeIs($item['route']),
-                        ]) wire:navigate>
-                            <span class="inline-block size-2 rounded-full @if(request()->routeIs($item['route'])) bg-slate-700 @else bg-slate-300 @endif"></span>
-                            {{ $item['label'] }}
-                        </a>
-                    @endforeach
+                <div class="sidebar-nav-section">
+                    <p class="sidebar-nav-label sidebar-collapse-hidden">{{ __('Operations') }}</p>
+                    <nav class="space-y-2">
+                        @foreach ($operationLinks as $item)
+                            <a href="{{ route($item['route']) }}"
+                                @class([
+                                    'sidebar-nav-link',
+                                    'sidebar-nav-link--active' => request()->routeIs($item['route']),
+                                ])
+                                wire:navigate
+                                title="{{ $item['label'] }}"
+                            >
+                                <span class="inline-flex size-2 rounded-full bg-white/70"></span>
+                                <span class="sidebar-text">{{ $item['label'] }}</span>
+                            </a>
+                        @endforeach
+                    </nav>
                 </div>
-            </nav>
 
-            <div class="mt-8 space-y-2">
-                <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500">{{ __('Notifications') }}</p>
-                <div class="rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-                    <livewire:notification-dropdown />
+                <div class="mt-auto space-y-4 pt-8 sidebar-collapse-hidden">
+                    <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-white/70">
+                        <p class="text-sm font-semibold text-white">{{ __('Need Help?') }}</p>
+                        <p>{{ __('Reach the success team at ops@bisnispanel.test') }}</p>
+                    </div>
+                    <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+                        <button type="submit" class="w-full rounded-2xl border border-white/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10" data-test="logout-button">
+                            {{ __('Log Out') }}
+                        </button>
+                    </form>
                 </div>
-            </div>
 
-            <flux:spacer />
+                <div class="mt-auto flex w-full items-center justify-center lg:hidden">
+                    <button type="button" class="sidebar-toggle text-white/60" @click="sidebarCollapsed = ! sidebarCollapsed">
+                        <svg class="size-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </button>
+                </div>
+            </aside>
 
-            <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p class="text-sm font-semibold text-neutral-900">{{ __('Need help?') }}</p>
-                <p class="mt-1 text-xs text-neutral-500">{{ __('Review the guide and support checklist on the homepage.') }}</p>
-                <a href="{{ route('home') }}#support" class="mt-3 inline-flex items-center text-sm font-semibold text-slate-700 hover:underline">
-                    {{ __('Open support guide') }}
-                </a>
-            </div>
+            <div class="app-content">
+                <header class="app-header">
+                    <div class="app-header__inner">
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                            <div class="flex items-center gap-3">
+                                <button type="button" class="sidebar-toggle hidden lg:inline-flex" @click="sidebarCollapsed = ! sidebarCollapsed">
+                                    <svg x-show="! sidebarCollapsed" x-cloak class="size-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 6l6 6-6 6" />
+                                    </svg>
+                                    <svg x-show="sidebarCollapsed" x-cloak class="size-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="m18 6-6 6 6 6" />
+                                    </svg>
+                                </button>
 
-            <!-- Desktop User Menu -->
-            <flux:dropdown class="hidden lg:block mt-6" position="bottom" align="start">
-                <flux:profile
-                    :name="auth()->user()->name"
-                    :initials="auth()->user()->initials()"
-                    icon:trailing="chevrons-up-down"
-                    data-test="sidebar-menu-button"
-                />
+                                <div class="header-title">
+                                    <p class="header-title__eyebrow">{{ __('Operations Control') }}</p>
+                                    <h1 class="header-title__main">{{ $title ?? config('app.name', 'BisnisPanel') }}</h1>
+                                </div>
+                            </div>
 
-                <flux:menu class="w-[220px]">
-                    <flux:menu.radio.group>
-                        <div class="p-0 text-sm font-normal">
-                            <div class="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
-                                <span class="relative flex h-8 w-8 shrink-0 overflow-hidden rounded-lg">
-                                    <span class="flex h-full w-full items-center justify-center rounded-lg bg-neutral-200 text-black">
-                                        {{ auth()->user()->initials() }}
-                                    </span>
-                                </span>
+                            <div class="header-actions">
+                                <div class="header-action-item">
+                                    <livewire:notification-dropdown />
+                                </div>
 
-                                <div class="grid flex-1 text-start text-sm leading-tight">
-                                    <span class="truncate font-semibold">{{ auth()->user()->name }}</span>
-                                    <span class="truncate text-xs">{{ auth()->user()->email }}</span>
+                                <div class="header-action-item">
+                                    <flux:dropdown align="end">
+                                        <button type="button" class="profile-chip w-full sm:w-auto">
+                                            <div class="profile-chip__avatar">{{ $user->initials() }}</div>
+                                            <div class="leading-tight text-left hidden sm:block">
+                                                <p class="text-sm font-semibold text-[var(--text-primary)] truncate">{{ $user->name }}</p>
+                                                <p class="text-xs text-[var(--text-muted)]">{{ $user->email }}</p>
+                                            </div>
+                                            <svg class="ms-2 size-4 text-[var(--text-muted)]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="m6 9 6 6 6-6" />
+                                            </svg>
+                                        </button>
+
+                                        <flux:menu class="w-80 rounded-2xl border border-slate-200 !bg-white shadow-xl" style="background-color: white !important;">
+                                            <div class="flex items-center gap-3 px-3 py-3 !bg-white">
+                                                <div class="flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-sm font-semibold text-neutral-600">
+                                                    {{ $user->initials() }}
+                                                </div>
+                                                <div class="grid flex-1 text-start leading-tight">
+                                                    <span class="truncate text-sm font-semibold text-neutral-900">{{ $user->name }}</span>
+                                                    <span class="truncate text-xs text-neutral-500">{{ $user->email }}</span>
+                                                </div>
+                                            </div>
+
+                                            <flux:menu.separator class="bg-slate-200" />
+
+                                            <div class="p-1 !bg-white">
+                                                <a href="{{ route('profile.edit') }}" wire:navigate class="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-slate-50 transition-colors">
+                                                    <flux:icon.cog class="size-4" />
+                                                    {{ __('Settings') }}
+                                                </a>
+                                            </div>
+
+                                            <flux:menu.separator class="bg-slate-200" />
+
+                                            <div class="p-1 !bg-white">
+                                                <form method="POST" action="{{ route('logout') }}" class="w-full">
+                                                    @csrf
+                                                    <button type="submit" class="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-rose-50 hover:text-rose-600 transition-colors" data-test="logout-button">
+                                                        <flux:icon.arrow-right-start-on-rectangle class="size-4" />
+                                                        {{ __('Log Out') }}
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </flux:menu>
+                                    </flux:dropdown>
                                 </div>
                             </div>
                         </div>
-                    </flux:menu.radio.group>
+                    </div>
 
-                    <flux:menu.separator />
-
-                    <flux:menu.radio.group>
-                        <flux:menu.item :href="route('profile.edit')" icon="cog" wire:navigate>{{ __('Settings') }}</flux:menu.item>
-                    </flux:menu.radio.group>
-
-                    <flux:menu.separator />
-
-                    <form method="POST" action="{{ route('logout') }}" class="w-full">
-                        @csrf
-                        <flux:menu.item as="button" type="submit" icon="arrow-right-start-on-rectangle" class="w-full" data-test="logout-button">
-                            {{ __('Log Out') }}
-                        </flux:menu.item>
-                    </form>
-                </flux:menu>
-            </flux:dropdown>
-        </flux:sidebar>
-
-        <!-- Mobile User Menu -->
-        <flux:header class="lg:hidden bg-white border-b border-slate-200">
-            <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" />
-
-            <div class="ms-3">
-                <livewire:notification-dropdown />
-            </div>
-
-            <flux:spacer />
-
-            <flux:dropdown position="top" align="end">
-                <flux:profile
-                    :initials="auth()->user()->initials()"
-                    icon-trailing="chevron-down"
-                />
-
-                <flux:menu>
-                    <flux:menu.radio.group>
-                        <div class="p-0 text-sm font-normal">
-                            <div class="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
-                                <span class="relative flex h-8 w-8 shrink-0 overflow-hidden rounded-lg">
-                                    <span
-                                        class="flex h-full w-full items-center justify-center rounded-lg bg-neutral-200 text-black dark:bg-neutral-700 dark:text-white"
+                    <div class="border-t border-[var(--surface-border)] bg-[var(--surface-base)] px-6 py-3 lg:hidden">
+                        <div class="flex items-center gap-3">
+                            <div class="flex flex-1 gap-2 overflow-x-auto text-sm text-[var(--text-muted)]">
+                                @foreach ($operationLinks as $item)
+                                    <a href="{{ route($item['route']) }}"
+                                        @class([
+                                            'rounded-full px-3 py-1.5 border',
+                                            'border-[var(--primary)] text-[var(--primary)]' => request()->routeIs($item['route']),
+                                            'border-transparent bg-[var(--surface-muted)]' => ! request()->routeIs($item['route']),
+                                        ])
+                                        wire:navigate
                                     >
-                                        {{ auth()->user()->initials() }}
-                                    </span>
-                                </span>
-
-                                <div class="grid flex-1 text-start text-sm leading-tight">
-                                    <span class="truncate font-semibold">{{ auth()->user()->name }}</span>
-                                    <span class="truncate text-xs">{{ auth()->user()->email }}</span>
-                                </div>
+                                        {{ $item['label'] }}
+                                    </a>
+                                @endforeach
                             </div>
+                            <livewire:notification-dropdown />
                         </div>
-                    </flux:menu.radio.group>
+                    </div>
+                </header>
 
-                    <flux:menu.separator />
-
-                    <flux:menu.radio.group>
-                        <flux:menu.item :href="route('profile.edit')" icon="cog" wire:navigate>{{ __('Settings') }}</flux:menu.item>
-                    </flux:menu.radio.group>
-
-                    <flux:menu.separator />
-
-                    <form method="POST" action="{{ route('logout') }}" class="w-full">
-                        @csrf
-                        <flux:menu.item as="button" type="submit" icon="arrow-right-start-on-rectangle" class="w-full" data-test="logout-button">
-                            {{ __('Log Out') }}
-                        </flux:menu.item>
-                    </form>
-                </flux:menu>
-            </flux:dropdown>
-        </flux:header>
-
-        {{ $slot }}
+                <main class="mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-4 py-8 sm:px-6">
+                    {{ $slot }}
+                </main>
+            </div>
+        </div>
 
         @fluxScripts
     </body>

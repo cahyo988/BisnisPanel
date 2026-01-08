@@ -64,40 +64,37 @@
                     :initials="auth()->user()->initials()"
                 />
 
-                <flux:menu>
-                    <flux:menu.radio.group>
-                        <div class="p-0 text-sm font-normal">
-                            <div class="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
-                                <span class="relative flex h-8 w-8 shrink-0 overflow-hidden rounded-lg">
-                                    <span
-                                        class="flex h-full w-full items-center justify-center rounded-lg bg-neutral-200 text-black dark:bg-neutral-700 dark:text-white"
-                                    >
-                                        {{ auth()->user()->initials() }}
-                                    </span>
-                                </span>
-
-                                <div class="grid flex-1 text-start text-sm leading-tight">
-                                    <span class="truncate font-semibold">{{ auth()->user()->name }}</span>
-                                    <span class="truncate text-xs">{{ auth()->user()->email }}</span>
-                                </div>
-                            </div>
+                <flux:menu class="w-96 rounded-2xl border border-slate-200 !bg-white shadow-xl" style="background-color: white !important;">
+                    <div class="flex items-center gap-3 px-3 py-3 !bg-white">
+                        <div class="flex size-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-sm font-semibold text-neutral-600">
+                            {{ auth()->user()->initials() }}
                         </div>
-                    </flux:menu.radio.group>
+                        <div class="grid flex-1 text-start leading-tight">
+                            <span class="truncate text-sm font-semibold text-neutral-900">{{ auth()->user()->name }}</span>
+                            <span class="truncate text-xs text-neutral-500">{{ auth()->user()->email }}</span>
+                        </div>
+                    </div>
 
-                    <flux:menu.separator />
+                    <flux:menu.separator class="bg-slate-200" />
 
-                    <flux:menu.radio.group>
-                        <flux:menu.item :href="route('profile.edit')" icon="cog" wire:navigate>{{ __('Settings') }}</flux:menu.item>
-                    </flux:menu.radio.group>
+                    <div class="p-1 !bg-white">
+                        <a href="{{ route('profile.edit') }}" wire:navigate class="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-slate-50 transition-colors">
+                            <flux:icon.cog class="size-4" />
+                            {{ __('Settings') }}
+                        </a>
+                    </div>
 
-                    <flux:menu.separator />
+                    <flux:menu.separator class="bg-slate-200" />
 
-                    <form method="POST" action="{{ route('logout') }}" class="w-full">
-                        @csrf
-                        <flux:menu.item as="button" type="submit" icon="arrow-right-start-on-rectangle" class="w-full" data-test="logout-button">
-                            {{ __('Log Out') }}
-                        </flux:menu.item>
-                    </form>
+                    <div class="p-1 !bg-white">
+                        <form method="POST" action="{{ route('logout') }}" class="w-full">
+                            @csrf
+                            <button type="submit" class="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-rose-50 hover:text-rose-600 transition-colors" data-test="logout-button">
+                                <flux:icon.arrow-right-start-on-rectangle class="size-4" />
+                                {{ __('Log Out') }}
+                            </button>
+                        </form>
+                    </div>
                 </flux:menu>
             </flux:dropdown>
         </flux:header>
