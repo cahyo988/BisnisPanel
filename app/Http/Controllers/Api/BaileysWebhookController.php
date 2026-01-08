@@ -16,7 +16,7 @@ class BaileysWebhookController extends Controller
     public function incomingMessage(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'device_id' => ['nullable', 'integer', 'exists:whatsapp_devices,id'],
+            'device_id' => ['nullable', 'integer'],
             'device_phone' => ['nullable', 'string'],
             'from' => ['required', 'string'],
             'type' => ['required', 'string', Rule::in(['text', 'image', 'document', 'button'])],
@@ -24,6 +24,10 @@ class BaileysWebhookController extends Controller
         ]);
 
         $device = $this->resolveDevice($data['device_id'] ?? null, $data['device_phone'] ?? null);
+
+        if (! $device) {
+            return response()->json(['status' => 'ignored', 'message' => 'Device not found'], 200);
+        }
 
         $log = MessageLog::create([
             'user_id' => $device->user_id,
@@ -51,7 +55,7 @@ class BaileysWebhookController extends Controller
     public function deviceStatus(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'device_id' => ['nullable', 'integer', 'exists:whatsapp_devices,id'],
+            'device_id' => ['nullable', 'integer'],
             'phone_number' => ['nullable', 'string'],
             'status' => ['required', 'string', Rule::in(['connected', 'disconnected'])],
             'session' => ['nullable', 'array'],
@@ -60,6 +64,10 @@ class BaileysWebhookController extends Controller
         ]);
 
         $device = $this->resolveDevice($data['device_id'] ?? null, $data['phone_number'] ?? null);
+
+        if (! $device) {
+            return response()->json(['status' => 'ignored', 'message' => 'Device not found'], 200);
+        }
 
         $device->fill([
             'status' => $data['status'],
@@ -79,10 +87,10 @@ class BaileysWebhookController extends Controller
         return response()->json(['status' => 'ok']);
     }
 
-    private function resolveDevice(?int $deviceId, ?string $phoneNumber): WhatsAppDevice
+    private function resolveDevice(?int $deviceId, ?string $phoneNumber): ?WhatsAppDevice
     {
         if (! $deviceId && ! $phoneNumber) {
-            abort(422, 'Device reference is required.');
+            return null;
         }
 
         return WhatsAppDevice::query()
@@ -92,7 +100,7 @@ class BaileysWebhookController extends Controller
                     ? $query->orWhere('phone_number', $phoneNumber)
                     : $query->where('phone_number', $phoneNumber);
             })
-            ->firstOrFail();
+            ->first();
     }
 
     private function runAutoReplies(WhatsAppDevice $device, string $incoming, string $sender): void

@@ -9,6 +9,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
+use Throwable;
 
 class DeviceList extends Component
 {
@@ -52,7 +53,7 @@ class DeviceList extends Component
                         ->orWhere('phone_number', 'like', '%'.$this->search.'%');
                 });
             })
-            ->orderByDesc('updated_at')
+            ->orderBy('id')
             ->get();
     }
 
@@ -72,15 +73,23 @@ class DeviceList extends Component
 
     public function showQr(WhatsAppGateway $gateway, int $deviceId): void
     {
+        // Check if user session is still valid
+        if (! auth()->check()) {
+            session()->flash('error', __('Your session has expired. Please login again.'));
+            $this->redirectRoute('login');
+            return;
+        }
+
         $device = WhatsAppDevice::query()
             ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
             ->findOrFail($deviceId);
 
         $this->authorize('view', $device);
 
-        $gateway->connectDevice($device->id, $device->phone_number, $device->name);
+        $gateway->connectDevice($device->id, $device->phone_number, $device->name, force: false);
 
-        $this->dispatch('qr-device-selected', deviceId: $device->id);
+        // Dispatch event to show modal
+        $this->dispatch('show-qr-modal', deviceId: $device->id);
     }
 
     public function disconnect(WhatsAppGateway $gateway, int $deviceId): void
@@ -91,9 +100,15 @@ class DeviceList extends Component
 
         $this->authorize('update', $device);
 
-        $gateway->disconnectDevice($device->id);
+        $device->update(['status' => 'disconnected', 'session' => null]);
 
-        session()->flash('device_removed', __('Device disconnected. Refreshing status...'));
+        try {
+            $gateway->disconnectDevice($device->id);
+            session()->flash('device_removed', __('Device disconnected. Refreshing status...'));
+        } catch (Throwable $exception) {
+            report($exception);
+            session()->flash('device_removed', __('Gateway unreachable. Device status will update once the connection recovers.'));
+        }
     }
 
     private function applyUserScope(Builder $builder): Builder

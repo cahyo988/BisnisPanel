@@ -39,6 +39,8 @@ return [
         'base_url' => env('WHATSAPP_GATEWAY_URL'),
         'token' => env('WHATSAPP_GATEWAY_TOKEN'),
         'webhook_token' => env('WHATSAPP_WEBHOOK_TOKEN'),
+        'timeout' => env('WHATSAPP_HTTP_TIMEOUT', 10),
+        'connect_timeout' => env('WHATSAPP_HTTP_CONNECT_TIMEOUT', 5),
     ],
 
 ];

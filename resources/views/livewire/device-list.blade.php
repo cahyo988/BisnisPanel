@@ -46,7 +46,7 @@
                 </div>
 
                 <div class="flex flex-wrap gap-3">
-                    <flux:button wire:click="showQr({{ $device->id }})" variant="outline">{{ __('Show QR') }}</flux:button>
+                    <flux:button wire:click="showQr({{ $device->id }})" variant="outline" :disabled="$device->status === 'connected'">{{ __('Show QR') }}</flux:button>
                     <flux:button
                         wire:click="disconnect({{ $device->id }})"
                         variant="outline"

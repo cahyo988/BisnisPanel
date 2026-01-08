@@ -108,7 +108,10 @@ async function startDeviceSession(deviceId, devicePhone, name) {
     const { connection, lastDisconnect, qr } = update;
     const now = new Date().toISOString();
 
+    logger.info({ deviceId, updateKeys: Object.keys(update) }, 'Connection update received');
+
     if (qr) {
+      logger.info({ deviceId, qrLength: qr.length }, 'QR code generated, sending to webhook');
       await sendDeviceWebhook({
         device_id: deviceId,
         phone_number: devicePhone || null,
@@ -120,6 +123,7 @@ async function startDeviceSession(deviceId, devicePhone, name) {
 
     if (connection === 'open') {
       const phone = parsePhone(sock.user?.id) || devicePhone || null;
+      logger.info({ deviceId, phone }, 'Connection opened successfully');
 
       await sendDeviceWebhook({
         device_id: deviceId,
@@ -135,6 +139,8 @@ async function startDeviceSession(deviceId, devicePhone, name) {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
+      logger.info({ deviceId, statusCode, shouldReconnect }, 'Connection closed');
+
       await sendDeviceWebhook({
         device_id: deviceId,
         phone_number: devicePhone || null,
@@ -144,9 +150,11 @@ async function startDeviceSession(deviceId, devicePhone, name) {
 
       if (shouldReconnect) {
         sessions.delete(deviceId);
+        logger.info({ deviceId }, 'Attempting to reconnect');
         await startDeviceSession(deviceId, devicePhone, name);
       } else {
         sessions.delete(deviceId);
+        logger.info({ deviceId }, 'Not reconnecting (logged out)');
       }
     }
   });
@@ -224,18 +232,72 @@ app.get('/health', (_req, res) => {
 });
 
 app.post('/devices/connect', requireGatewayToken, async (req, res) => {
-  const { device_id: deviceId, device_phone: devicePhone, name } = req.body || {};
+  const { device_id: deviceId, device_phone: devicePhone, name, force } = req.body || {};
 
   if (!deviceId) {
     return res.status(422).json({ error: 'device_id is required' });
   }
 
   try {
+    if (force) {
+      logger.info({ deviceId }, 'Force cleanup requested');
+
+      const sock = sessions.get(deviceId);
+      if (sock) {
+        logger.info({ deviceId }, 'Existing session found, cleaning up');
+
+        // Stop listening to events
+        sock.ev.removeAllListeners('connection.update');
+        sock.ev.removeAllListeners('creds.update');
+        sock.ev.removeAllListeners('messages.upsert');
+
+        // Try to logout properly
+        try {
+          await sock.logout();
+          logger.info({ deviceId }, 'Logged out successfully');
+        } catch (err) {
+          logger.warn({ deviceId, error: err.message }, 'Logout failed, continuing cleanup');
+        }
+
+        // Wait longer for logout to propagate to WhatsApp servers
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // End connection
+        try {
+          sock.end(undefined);
+        } catch (err) {
+          logger.warn({ deviceId, error: err.message }, 'End connection failed');
+        }
+
+        sessions.delete(deviceId);
+
+        // Verify session is deleted
+        if (sessions.has(deviceId)) {
+          logger.error({ deviceId }, 'Failed to delete session from memory');
+        } else {
+          logger.info({ deviceId }, 'Session removed from memory');
+        }
+      }
+
+      // Remove session files
+      try {
+        removeSessionFiles(deviceId);
+        logger.info({ deviceId }, 'Session files removed');
+      } catch (err) {
+        logger.warn({ deviceId, error: err.message }, 'Session file removal failed');
+      }
+
+      // Extended delay to ensure WhatsApp servers fully recognize disconnect
+      logger.info({ deviceId }, 'Waiting for WhatsApp to fully disconnect...');
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+
+    logger.info({ deviceId }, 'Starting new device session');
     await startDeviceSession(deviceId, devicePhone, name);
 
     return res.json({ status: 'connecting', device_id: deviceId });
   } catch (error) {
-    logger.error({ error: error.message }, 'Failed to connect device');
+    logger.error({ error: error.message, stack: error.stack }, 'Failed to connect device');
 
     return res.status(500).json({ error: 'Failed to connect device' });
   }
@@ -252,9 +314,22 @@ app.post('/devices/disconnect', requireGatewayToken, async (req, res) => {
 
   try {
     if (sock) {
-      await sock.logout();
+      // Stop listening to events to prevent side effects during cleanup
+      sock.ev.removeAllListeners('connection.update');
+      sock.ev.removeAllListeners('creds.update');
+
+      try {
+        await sock.logout();
+      } catch (err) {
+        // Ignore logout errors (e.g. if already disconnected)
+      }
+
+      sock.end(undefined);
       sessions.delete(deviceId);
     }
+
+    // Small delay to ensure file locks are released on Windows
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
     removeSessionFiles(deviceId);
 

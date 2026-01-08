@@ -49,12 +49,13 @@ class WhatsAppGateway
      *
      * @return array<mixed>
      */
-    public function connectDevice(int $deviceId, ?string $devicePhone, ?string $name = null): array
+    public function connectDevice(int $deviceId, ?string $devicePhone, ?string $name = null, bool $force = false): array
     {
         $payload = [
             'device_id' => $deviceId,
             'device_phone' => $devicePhone,
             'name' => $name,
+            'force' => $force,
         ];
 
         $baseUrl = config('services.whatsapp.base_url');
@@ -103,7 +104,9 @@ class WhatsAppGateway
     private function client(): PendingRequest
     {
         $request = $this->http->baseUrl(config('services.whatsapp.base_url'))
-            ->acceptJson();
+            ->acceptJson()
+            ->timeout(config('services.whatsapp.timeout', 10))
+            ->connectTimeout(config('services.whatsapp.connect_timeout', 5));
 
         if ($token = config('services.whatsapp.token')) {
             $request = $request->withToken($token);
