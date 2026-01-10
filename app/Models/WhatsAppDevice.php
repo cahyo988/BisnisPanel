@@ -58,7 +58,7 @@ class WhatsAppDevice extends Model
      */
     public function autoReplyRules(): HasMany
     {
-        return $this->hasMany(AutoReplyRule::class);
+        return $this->hasMany(AutoReplyRule::class, 'whatsapp_device_id');
     }
 
     public function isConnected(): bool

@@ -206,9 +206,32 @@
                 <main class="mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-4 py-8 sm:px-6">
                     {{ $slot }}
                 </main>
+                <div
+                    x-data="{ open: false, type: 'success', message: '' }"
+                    x-on:notify.window="
+                        type = $event.detail.type ?? 'success';
+                        message = $event.detail.message ?? '';
+                        open = true;
+                        setTimeout(() => open = false, 5000);
+                    "
+                    x-cloak
+                    class="fixed bottom-6 right-6 z-50"
+                >
+                    <template x-if="open">
+                        <div
+                            class="rounded-2xl border px-4 py-3 text-sm shadow-lg transition"
+                            :class="type === 'error'
+                                ? 'border-rose-200 bg-white text-rose-700'
+                                : 'border-emerald-200 bg-white text-emerald-700'"
+                        >
+                            <p x-text="message"></p>
+                        </div>
+                    </template>
+                </div>
             </div>
         </div>
 
         @fluxScripts
+        @stack('scripts')
     </body>
 </html>

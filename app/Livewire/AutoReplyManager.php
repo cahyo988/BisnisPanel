@@ -7,6 +7,7 @@ use App\Models\WhatsAppDevice;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
 
@@ -20,13 +21,21 @@ class AutoReplyManager extends Component
     public string $matchMode = 'exact';
     public string $replyType = 'text';
     public string $replyText = '';
+    public ?string $replyTemplate = null;
     public bool $isActive = true;
+    public array $templateOptions = [];
+
+    public function mount(): void
+    {
+        $this->templateOptions = $this->templatePresets();
+    }
 
     public function render(): View
     {
         return view('livewire.auto-reply-manager', [
             'devices' => $this->deviceOptions(),
             'rules' => $this->rulesList(),
+            'templates' => $this->templateOptions,
         ]);
     }
 
@@ -63,7 +72,10 @@ class AutoReplyManager extends Component
         }
 
         $this->resetForm();
-        session()->flash('auto_reply_saved', 'Auto reply rule saved.');
+        $this->dispatchBrowserEvent('notify', [
+            'type' => 'success',
+            'message' => __('Auto reply rule saved successfully.'),
+        ]);
     }
 
     public function edit(int $ruleId): void
@@ -80,6 +92,7 @@ class AutoReplyManager extends Component
         $this->matchMode = $rule->match_mode;
         $this->replyType = $rule->reply_type;
         $this->replyText = $rule->reply_text;
+        $this->replyTemplate = $this->detectTemplateKey($rule->reply_text) ?: null;
         $this->isActive = $rule->is_active;
     }
 
@@ -93,6 +106,11 @@ class AutoReplyManager extends Component
 
         $rule->delete();
 
+        $this->dispatchBrowserEvent('notify', [
+            'type' => 'success',
+            'message' => __('Rule deleted.'),
+        ]);
+
         $this->resetForm();
     }
 
@@ -105,6 +123,10 @@ class AutoReplyManager extends Component
         $this->authorize('update', $rule);
 
         $rule->update(['is_active' => ! $rule->is_active]);
+        $this->dispatchBrowserEvent('notify', [
+            'type' => 'success',
+            'message' => $rule->is_active ? __('Rule activated.') : __('Rule paused.'),
+        ]);
     }
 
     public function resetForm(): void
@@ -115,7 +137,74 @@ class AutoReplyManager extends Component
         $this->matchMode = 'exact';
         $this->replyType = 'text';
         $this->replyText = '';
+        $this->replyTemplate = '';
         $this->isActive = true;
+    }
+
+    public function applyTemplate(string $templateKey): void
+    {
+        if (! isset($this->templateOptions[$templateKey])) {
+            return;
+        }
+
+        $template = $this->templateOptions[$templateKey];
+
+        $this->replyTemplate = $templateKey;
+        $this->replyType = 'template';
+        $this->matchMode = $template['match_mode'] ?? $this->matchMode;
+        $this->keyword = $template['keyword'] ?? $this->keyword;
+        $this->replyText = $template['body'];
+
+        Log::info('Auto reply template applied', [
+            'template_key' => $templateKey,
+            'keyword' => $this->keyword,
+            'match_mode' => $this->matchMode,
+            'reply_type' => $this->replyType,
+        ]);
+
+        $this->dispatch(
+            'auto-template-filled',
+            keyword: $this->keyword,
+            matchMode: $this->matchMode,
+            replyType: $this->replyType,
+            replyText: $this->replyText
+        );
+    }
+
+    public function updatedReplyTemplate(?string $templateKey): void
+    {
+        if (blank($templateKey)) {
+            $this->replyTemplate = null;
+
+            return;
+        }
+
+        $this->applyTemplate($templateKey);
+    }
+
+    public function updatedReplyType(string $type): void
+    {
+        if ($type === 'text') {
+            $this->replyTemplate = '';
+        }
+    }
+
+    public function clearTemplate(): void
+    {
+        if ($this->replyType === 'template') {
+            $this->replyType = 'text';
+        }
+
+        $this->replyTemplate = null;
+    }
+
+    public function updatedReplyText(?string $value): void
+    {
+        if ($this->replyTemplate && isset($this->templateOptions[$this->replyTemplate])) {
+            if ($value !== $this->templateOptions[$this->replyTemplate]['body']) {
+                $this->replyTemplate = null;
+            }
+        }
     }
 
     protected function rules(): array
@@ -126,6 +215,7 @@ class AutoReplyManager extends Component
             'matchMode' => ['required', Rule::in(['exact', 'contains'])],
             'replyType' => ['required', Rule::in(['text', 'template'])],
             'replyText' => ['required', 'string', 'max:1000'],
+            'replyTemplate' => ['nullable', 'string', Rule::in(array_keys($this->templateOptions))],
             'isActive' => ['boolean'],
         ];
     }
@@ -158,5 +248,47 @@ class AutoReplyManager extends Component
 
         return $builder;
     }
-}
 
+    private function detectTemplateKey(string $text): string
+    {
+        foreach ($this->templateOptions as $key => $template) {
+            if ($template['body'] === $text) {
+                return $key;
+            }
+        }
+
+        return '';
+    }
+
+    protected function templatePresets(): array
+    {
+        $appName = config('app.name', 'BisnisPanel');
+
+        return [
+            'default_greeting' => [
+                'label' => 'Sapaan cepat',
+                'keyword' => 'halo',
+                'match_mode' => 'contains',
+                'body' => "Halo! Terima kasih telah menghubungi {$appName}. Ada yang bisa kami bantu hari ini?",
+            ],
+            'faq_hours' => [
+                'label' => 'Auto-reply jam operasional',
+                'keyword' => 'jam',
+                'match_mode' => 'contains',
+                'body' => "Hai! Jam operasional {$appName} adalah Senin - Jumat pukul 09.00-18.00. Balas JANJI jika ingin dijadwalkan panggilan.",
+            ],
+            'promo_info' => [
+                'label' => 'Balasan info promo',
+                'keyword' => 'promo',
+                'match_mode' => 'contains',
+                'body' => "Terima kasih atas ketertarikannya! Promo terbaru kami: diskon 10% + gratis ongkir untuk transaksi di atas Rp500.000. Ketik PESAN untuk dibantu admin.",
+            ],
+            'support_ticket' => [
+                'label' => 'Konfirmasi dukungan',
+                'keyword' => 'bantu',
+                'match_mode' => 'contains',
+                'body' => "Keluhan kamu sudah kami terima dan sedang diproses oleh tim {$appName}. Mohon menunggu maksimal 15 menit, kami akan update lewat chat ini.",
+            ],
+        ];
+    }
+}

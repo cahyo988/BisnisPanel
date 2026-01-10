@@ -44,6 +44,49 @@ function ensureSessionDir(deviceId) {
   return deviceDir;
 }
 
+function getMetadataPath(deviceId) {
+  const deviceDir = ensureSessionDir(deviceId);
+
+  return path.join(deviceDir, 'metadata.json');
+}
+
+function readDeviceMetadata(deviceId) {
+  const filePath = path.join(__dirname, 'sessions', String(deviceId), 'metadata.json');
+
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+
+  try {
+    const raw = fs.readFileSync(filePath, 'utf-8');
+
+    return JSON.parse(raw);
+  } catch (error) {
+    logger.warn({ deviceId, error: error.message }, 'Failed to parse device metadata');
+
+    return null;
+  }
+}
+
+function saveDeviceMetadata(deviceId, metadata) {
+  try {
+    fs.writeFileSync(
+      getMetadataPath(deviceId),
+      JSON.stringify(
+        {
+          device_id: deviceId,
+          updated_at: new Date().toISOString(),
+          ...metadata,
+        },
+        null,
+        2
+      )
+    );
+  } catch (error) {
+    logger.warn({ deviceId, error: error.message }, 'Failed to persist device metadata');
+  }
+}
+
 function parsePhone(jid) {
   if (!jid) {
     return null;
@@ -94,6 +137,11 @@ async function startDeviceSession(deviceId, devicePhone, name) {
   const deviceDir = ensureSessionDir(deviceId);
   const { state, saveCreds } = await useMultiFileAuthState(deviceDir);
   const { version } = await fetchLatestBaileysVersion();
+
+  saveDeviceMetadata(deviceId, {
+    device_phone: devicePhone || null,
+    name: name || null,
+  });
 
   const sock = makeWASocket({
     version,
@@ -202,6 +250,41 @@ async function startDeviceSession(deviceId, devicePhone, name) {
   logger.info({ deviceId, name }, 'Device session started');
 
   return sock;
+}
+
+async function bootstrapExistingSessions() {
+  const baseDir = path.join(__dirname, 'sessions');
+
+  if (!fs.existsSync(baseDir)) {
+    logger.info('No previous sessions to restore');
+    return;
+  }
+
+  const entries = fs.readdirSync(baseDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const deviceId = Number(entry.name);
+
+    if (Number.isNaN(deviceId)) {
+      logger.warn({ entry: entry.name }, 'Skipping invalid session directory name');
+      continue;
+    }
+
+    const metadata = readDeviceMetadata(deviceId) || {};
+    const devicePhone = metadata.device_phone || null;
+    const name = metadata.name || null;
+
+    try {
+      await startDeviceSession(deviceId, devicePhone, name);
+      logger.info({ deviceId }, 'Restored device session from disk');
+    } catch (error) {
+      logger.error({ deviceId, error: error.message }, 'Failed to restore device session');
+    }
+  }
 }
 
 function removeSessionFiles(deviceId) {
@@ -381,3 +464,11 @@ app.post('/messages', requireGatewayToken, async (req, res) => {
 app.listen(PORT, () => {
   logger.info({ port: PORT, panel: PANEL_BASE_URL }, 'Baileys gateway is running');
 });
+
+bootstrapExistingSessions()
+  .then(() => {
+    logger.info('Finished restoring existing sessions');
+  })
+  .catch((error) => {
+    logger.error({ error: error.message }, 'Failed to restore sessions on startup');
+  });

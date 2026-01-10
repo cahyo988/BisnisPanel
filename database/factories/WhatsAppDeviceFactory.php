@@ -22,4 +22,24 @@ class WhatsAppDeviceFactory extends Factory
             'last_seen_at' => now()->subMinutes(rand(1, 90)),
         ];
     }
+
+    /**
+     * Mark the device as connected for tests.
+     */
+    public function connected(): self
+    {
+        return $this->state(fn () => [
+            'status' => 'connected',
+        ]);
+    }
+
+    /**
+     * Mark the device as disconnected for tests.
+     */
+    public function disconnected(): self
+    {
+        return $this->state(fn () => [
+            'status' => 'disconnected',
+        ]);
+    }
 }

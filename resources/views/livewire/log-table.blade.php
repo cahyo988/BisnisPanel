@@ -1,4 +1,4 @@
-<div class="panel-card space-y-6">
+<div class="panel-card space-y-6" wire:poll.5s>
     <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
             <h3 class="panel-section-title">{{ __('Message Intelligence') }}</h3>

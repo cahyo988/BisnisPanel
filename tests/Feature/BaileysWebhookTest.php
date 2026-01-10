@@ -1,16 +1,24 @@
 <?php
 
+use App\Jobs\SendMessageJob;
 use App\Models\AutoReplyRule;
 use App\Models\MessageLog;
 use App\Models\User;
 use App\Models\WhatsAppDevice;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
-    config(['services.whatsapp.webhook_token' => 'secret-token']);
+    config([
+        'services.whatsapp.webhook_token' => 'secret-token',
+        'services.whatsapp.base_url' => null,
+        'services.whatsapp.token' => null,
+    ]);
 });
 
 it('stores incoming webhook messages and triggers auto replies', function (): void {
+    Queue::fake();
+
     $user = User::factory()->create();
     $device = WhatsAppDevice::factory()->for($user)->connected()->create();
 
@@ -53,6 +61,8 @@ it('stores incoming webhook messages and triggers auto replies', function (): vo
         'user_id' => $user->id,
         'title' => 'Incoming WhatsApp message',
     ]);
+
+    Queue::assertPushed(SendMessageJob::class);
 });
 
 it('updates device status via webhook', function (): void {
