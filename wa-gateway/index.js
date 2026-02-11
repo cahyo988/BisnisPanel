@@ -95,6 +95,44 @@ function parsePhone(jid) {
   return jid.split(':')[0].split('@')[0];
 }
 
+function normalizePhone(value) {
+  if (!value) {
+    return null;
+  }
+
+  const digits = String(value).replace(/\D/g, '');
+
+  if (!digits || digits.length > 14) {
+    return null;
+  }
+
+  return digits;
+}
+
+function resolveSenderJid(message) {
+  const keyParticipant = message?.key?.participant;
+  const msgParticipant = message?.participant;
+  const contextParticipant =
+    message?.message?.extendedTextMessage?.contextInfo?.participant ||
+    message?.message?.imageMessage?.contextInfo?.participant ||
+    message?.message?.documentMessage?.contextInfo?.participant ||
+    message?.message?.videoMessage?.contextInfo?.participant ||
+    message?.message?.audioMessage?.contextInfo?.participant ||
+    message?.message?.stickerMessage?.contextInfo?.participant;
+
+  return keyParticipant || msgParticipant || contextParticipant || message?.key?.remoteJid || '';
+}
+
+function resolveSenderNumber(message) {
+  const senderPn = message?.key?.senderPn;
+  if (senderPn) {
+    return normalizePhone(senderPn);
+  }
+
+  const senderJid = resolveSenderJid(message);
+  return normalizePhone(parsePhone(senderJid));
+}
+
 async function sendDeviceWebhook(payload) {
   if (!WEBHOOK_TOKEN) {
     logger.warn('WHATSAPP_WEBHOOK_TOKEN is empty; device webhook skipped');
@@ -156,10 +194,7 @@ async function startDeviceSession(deviceId, devicePhone, name) {
     const { connection, lastDisconnect, qr } = update;
     const now = new Date().toISOString();
 
-    logger.info({ deviceId, updateKeys: Object.keys(update) }, 'Connection update received');
-
     if (qr) {
-      logger.info({ deviceId, qrLength: qr.length }, 'QR code generated, sending to webhook');
       await sendDeviceWebhook({
         device_id: deviceId,
         phone_number: devicePhone || null,
@@ -171,7 +206,6 @@ async function startDeviceSession(deviceId, devicePhone, name) {
 
     if (connection === 'open') {
       const phone = parsePhone(sock.user?.id) || devicePhone || null;
-      logger.info({ deviceId, phone }, 'Connection opened successfully');
 
       await sendDeviceWebhook({
         device_id: deviceId,
@@ -187,8 +221,6 @@ async function startDeviceSession(deviceId, devicePhone, name) {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-      logger.info({ deviceId, statusCode, shouldReconnect }, 'Connection closed');
-
       await sendDeviceWebhook({
         device_id: deviceId,
         phone_number: devicePhone || null,
@@ -198,11 +230,9 @@ async function startDeviceSession(deviceId, devicePhone, name) {
 
       if (shouldReconnect) {
         sessions.delete(deviceId);
-        logger.info({ deviceId }, 'Attempting to reconnect');
         await startDeviceSession(deviceId, devicePhone, name);
       } else {
         sessions.delete(deviceId);
-        logger.info({ deviceId }, 'Not reconnecting (logged out)');
       }
     }
   });
@@ -218,7 +248,9 @@ async function startDeviceSession(deviceId, devicePhone, name) {
       }
 
       const remoteJid = message.key.remoteJid || '';
-      const from = parsePhone(remoteJid) || remoteJid;
+      const senderJid = resolveSenderJid(message);
+      const from =
+        resolveSenderNumber(message) || normalizePhone(parsePhone(remoteJid)) || normalizePhone(senderJid);
 
       let messageType = 'text';
       let text = '';
@@ -235,6 +267,13 @@ async function startDeviceSession(deviceId, devicePhone, name) {
         text = message.message.documentMessage.caption || '';
       }
 
+      logger.info({ message }, 'Incoming message raw');
+
+      if (!from) {
+        logger.warn({ deviceId, remoteJid, senderJid }, 'Incoming message ignored (invalid sender)');
+        continue;
+      }
+
       await sendIncomingWebhook({
         device_id: deviceId,
         device_phone: devicePhone || parsePhone(sock.user?.id) || null,
@@ -242,12 +281,24 @@ async function startDeviceSession(deviceId, devicePhone, name) {
         type: messageType,
         message: text,
       });
+
+      logger.info(
+        {
+          deviceId,
+          from,
+          type: messageType,
+          message: text,
+          remoteJid,
+          senderJid,
+          keyParticipant: message?.key?.participant,
+          msgParticipant: message?.participant,
+        },
+        'Incoming message received'
+      );
     }
   });
 
   sessions.set(deviceId, sock);
-
-  logger.info({ deviceId, name }, 'Device session started');
 
   return sock;
 }
@@ -375,7 +426,6 @@ app.post('/devices/connect', requireGatewayToken, async (req, res) => {
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
 
-    logger.info({ deviceId }, 'Starting new device session');
     await startDeviceSession(deviceId, devicePhone, name);
 
     return res.json({ status: 'connecting', device_id: deviceId });

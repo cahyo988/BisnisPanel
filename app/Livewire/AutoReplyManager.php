@@ -10,6 +10,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
+use Throwable;
 
 class AutoReplyManager extends Component
 {
@@ -41,41 +42,59 @@ class AutoReplyManager extends Component
 
     public function save(): void
     {
-        $validated = $this->validate();
+        try {
+            $validated = $this->validate();
 
-        $device = WhatsAppDevice::query()
-            ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
-            ->findOrFail($validated['deviceId']);
-
-        $this->authorize('view', $device);
-
-        $payload = [
-            'user_id' => $device->user_id,
-            'whatsapp_device_id' => $device->id,
-            'keyword' => $validated['keyword'],
-            'match_mode' => $validated['matchMode'],
-            'reply_type' => $validated['replyType'],
-            'reply_text' => $validated['replyText'],
-            'is_active' => $validated['isActive'],
-        ];
-
-        if ($this->ruleId) {
-            $rule = AutoReplyRule::query()
+            $device = WhatsAppDevice::query()
                 ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
-                ->findOrFail($this->ruleId);
+                ->findOrFail($validated['deviceId']);
 
-            $this->authorize('update', $rule);
+            $this->authorize('view', $device);
 
-            $rule->update($payload);
-        } else {
-            $rule = AutoReplyRule::create($payload);
+            $payload = [
+                'user_id' => $device->user_id,
+                'whatsapp_device_id' => $device->id,
+                'keyword' => $validated['keyword'],
+                'match_mode' => $validated['matchMode'],
+                'reply_type' => $validated['replyType'],
+                'reply_text' => $validated['replyText'],
+                'is_active' => $validated['isActive'],
+            ];
+
+            if ($this->ruleId) {
+                $rule = AutoReplyRule::query()
+                    ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
+                    ->findOrFail($this->ruleId);
+
+                $this->authorize('update', $rule);
+
+                $rule->update($payload);
+                Log::info('Auto reply rule updated', [
+                    'rule_id' => $rule->getKey(),
+                    'device_id' => $device->id,
+                    'user_id' => $device->user_id,
+                ]);
+            } else {
+                $this->authorize('create', AutoReplyRule::class);
+                $rule = AutoReplyRule::create($payload);
+                Log::info('Auto reply rule created', [
+                    'rule_id' => $rule->getKey(),
+                    'device_id' => $device->id,
+                    'user_id' => $device->user_id,
+                ]);
+            }
+
+            $this->resetForm();
+            $this->notify('success', __('Auto reply rule saved successfully.'));
+        } catch (Throwable $exception) {
+            Log::error('Failed to save auto reply rule', [
+                'rule_id' => $this->ruleId,
+                'device_id' => $this->deviceId,
+                'message' => $exception->getMessage(),
+            ]);
+
+            $this->notify('error', __('Failed to save auto reply rule.'));
         }
-
-        $this->resetForm();
-        $this->dispatchBrowserEvent('notify', [
-            'type' => 'success',
-            'message' => __('Auto reply rule saved successfully.'),
-        ]);
     }
 
     public function edit(int $ruleId): void
@@ -98,35 +117,46 @@ class AutoReplyManager extends Component
 
     public function delete(int $ruleId): void
     {
-        $rule = AutoReplyRule::query()
-            ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
-            ->findOrFail($ruleId);
+        try {
+            $rule = AutoReplyRule::query()
+                ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
+                ->findOrFail($ruleId);
 
-        $this->authorize('delete', $rule);
+            $this->authorize('delete', $rule);
 
-        $rule->delete();
+            $rule->delete();
 
-        $this->dispatchBrowserEvent('notify', [
-            'type' => 'success',
-            'message' => __('Rule deleted.'),
-        ]);
+            $this->notify('success', __('Rule deleted.'));
+            $this->resetForm();
+        } catch (Throwable $exception) {
+            Log::error('Failed to delete auto reply rule', [
+                'rule_id' => $ruleId,
+                'message' => $exception->getMessage(),
+            ]);
 
-        $this->resetForm();
+            $this->notify('error', __('Failed to delete auto reply rule.'));
+        }
     }
 
     public function toggle(int $ruleId): void
     {
-        $rule = AutoReplyRule::query()
-            ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
-            ->findOrFail($ruleId);
+        try {
+            $rule = AutoReplyRule::query()
+                ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
+                ->findOrFail($ruleId);
 
-        $this->authorize('update', $rule);
+            $this->authorize('update', $rule);
 
-        $rule->update(['is_active' => ! $rule->is_active]);
-        $this->dispatchBrowserEvent('notify', [
-            'type' => 'success',
-            'message' => $rule->is_active ? __('Rule activated.') : __('Rule paused.'),
-        ]);
+            $rule->update(['is_active' => ! $rule->is_active]);
+            $this->notify('success', $rule->is_active ? __('Rule activated.') : __('Rule paused.'));
+        } catch (Throwable $exception) {
+            Log::error('Failed to toggle auto reply rule', [
+                'rule_id' => $ruleId,
+                'message' => $exception->getMessage(),
+            ]);
+
+            $this->notify('error', __('Failed to update rule status.'));
+        }
     }
 
     public function resetForm(): void
@@ -220,6 +250,20 @@ class AutoReplyManager extends Component
         ];
     }
 
+    private function notify(string $type, string $message): void
+    {
+        if (method_exists($this, 'dispatchBrowserEvent')) {
+            $this->dispatchBrowserEvent('swal', [
+                'type' => $type,
+                'message' => $message,
+            ]);
+            $this->dispatchBrowserEvent('notify', [
+                'type' => $type,
+                'message' => $message,
+            ]);
+        }
+    }
+
     private function deviceOptions()
     {
         return WhatsAppDevice::query()
@@ -277,11 +321,47 @@ class AutoReplyManager extends Component
                 'match_mode' => 'contains',
                 'body' => "Hai! Jam operasional {$appName} adalah Senin - Jumat pukul 09.00-18.00. Balas JANJI jika ingin dijadwalkan panggilan.",
             ],
+            'faq_price' => [
+                'label' => 'Auto-reply info harga',
+                'keyword' => 'harga',
+                'match_mode' => 'contains',
+                'body' => "Halo! Untuk info harga terbaru dari {$appName}, mohon sebutkan produk/layanan yang kamu maksud. Tim kami akan kirimkan detailnya.",
+            ],
+            'faq_location' => [
+                'label' => 'Auto-reply lokasi',
+                'keyword' => 'alamat',
+                'match_mode' => 'contains',
+                'body' => "Berikut alamat {$appName}: [ISI ALAMAT LENGKAP]. Jika butuh patokan, balas MAP untuk kirim tautan maps.",
+            ],
             'promo_info' => [
                 'label' => 'Balasan info promo',
                 'keyword' => 'promo',
                 'match_mode' => 'contains',
                 'body' => "Terima kasih atas ketertarikannya! Promo terbaru kami: diskon 10% + gratis ongkir untuk transaksi di atas Rp500.000. Ketik PESAN untuk dibantu admin.",
+            ],
+            'catalog_request' => [
+                'label' => 'Auto-reply katalog',
+                'keyword' => 'katalog',
+                'match_mode' => 'contains',
+                'body' => "Baik! Kami kirimkan katalog {$appName}. Mohon tunggu sebentar, atau balas PRODUK jika ingin rekomendasi cepat.",
+            ],
+            'order_status' => [
+                'label' => 'Auto-reply status pesanan',
+                'keyword' => 'status',
+                'match_mode' => 'contains',
+                'body' => "Untuk cek status pesanan, silakan kirimkan nomor order. Tim {$appName} akan bantu cekkan.",
+            ],
+            'payment_info' => [
+                'label' => 'Auto-reply info pembayaran',
+                'keyword' => 'bayar',
+                'match_mode' => 'contains',
+                'body' => "Pembayaran dapat dilakukan via transfer/QRIS. Balas METODE untuk mendapatkan detail pembayaran terbaru dari {$appName}.",
+            ],
+            'cs_handoff' => [
+                'label' => 'Auto-reply minta admin',
+                'keyword' => 'admin',
+                'match_mode' => 'contains',
+                'body' => "Baik, pesan kamu akan diteruskan ke admin {$appName}. Mohon tunggu sebentar ya.",
             ],
             'support_ticket' => [
                 'label' => 'Konfirmasi dukungan',

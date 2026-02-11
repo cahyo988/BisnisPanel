@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
 use Livewire\Volt\Volt;
+use App\Http\Controllers\AutomationDocsController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -16,6 +17,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::view('devices', 'devices.index')->name('devices.index');
     Route::view('messaging', 'messaging.index')->name('messaging.index');
     Route::view('automation', 'automation.index')->name('automation.index');
+    Route::get('automation/docs', [AutomationDocsController::class, 'download'])->name('automation.docs');
     Route::view('logs', 'logs.index')->name('logs.index');
 });
 

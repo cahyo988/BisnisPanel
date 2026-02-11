@@ -1,4 +1,4 @@
-﻿<div class="panel-card">
+<div class="panel-card" wire:key="auto-reply-manager">
     <h3 class="panel-section-title">{{ __('Auto Reply Rules') }}</h3>
     <p class="panel-section-subtitle">{{ __('Define keyword-based responses per device.') }}</p>
 
@@ -147,8 +147,6 @@
 
             const handler = (event) => {
                 const detail = event.detail || {};
-                console.info('[AutoReply] Template applied', detail);
-
                 const keywordInput = document.getElementById('rule-keyword');
                 if (keywordInput && 'keyword' in detail) {
                     keywordInput.value = detail.keyword ?? '';
@@ -176,6 +174,36 @@
 
             window[listenerName] = handler;
             window.addEventListener('auto-template-filled', handler);
+        })();
+    </script>
+
+    <script data-auto-reply-swal>
+        (function registerAutoReplySwalListener() {
+            const listenerName = '__autoReplySwalListener';
+            if (window[listenerName]) {
+                window.removeEventListener('swal', window[listenerName]);
+            }
+
+            const handler = (event) => {
+                const detail = event.detail || {};
+                const type = detail.type || 'success';
+                const message = detail.message || '';
+
+                if (!window.Swal || !message) {
+                    return;
+                }
+
+                window.Swal.fire({
+                    icon: type === 'error' ? 'error' : 'success',
+                    title: message,
+                    timer: 2200,
+                    showConfirmButton: false,
+                    timerProgressBar: true,
+                });
+            };
+
+            window[listenerName] = handler;
+            window.addEventListener('swal', handler);
         })();
     </script>
 @endpush
