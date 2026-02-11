@@ -4,11 +4,15 @@ namespace App\Livewire;
 
 use App\Jobs\ProcessBroadcastJob;
 use App\Models\MessageLog;
+use App\Models\MessageTemplate;
 use App\Models\WhatsAppDevice;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use Illuminate\Support\Collection;
+use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use ZipArchive;
@@ -23,6 +27,8 @@ class BroadcastPage extends Component
     public int $delayMs = 1500;
     public $upload;
     public ?string $currentBatchId = null;
+    public ?string $scheduledAt = null;
+    public ?int $templateId = null;
 
     protected $listeners = [
         'device-created' => '$refresh',
@@ -35,12 +41,22 @@ class BroadcastPage extends Component
             'devices' => $this->deviceOptions(),
             'progress' => $this->progress,
             'recentLogs' => $this->currentBatchId ? $this->batchLogs() : collect(),
+            'templates' => $this->templateOptions(),
         ]);
     }
 
     public function start(): void
     {
         $validated = $this->validate($this->rules());
+
+        if ($this->templateId) {
+            $this->applyTemplate();
+        }
+
+        if (blank($this->message)) {
+            $this->addError('message', __('Message body is required.'));
+            return;
+        }
 
         $numbers = collect($this->loadRecipients())
             ->map(fn ($phone) => $this->normalizePhone($phone))
@@ -61,8 +77,9 @@ class BroadcastPage extends Component
         $this->authorize('view', $device);
 
         $batchId = (string) Str::uuid();
+        $scheduledAt = $this->parseSchedule($validated['scheduledAt'] ?? null);
 
-        $logIds = $numbers->take(500)->map(function (string $phone) use ($device, $batchId) {
+        $logIds = $numbers->take(500)->map(function (string $phone) use ($device, $batchId, $scheduledAt) {
             return MessageLog::create([
                 'user_id' => $device->user_id,
                 'whatsapp_device_id' => $device->id,
@@ -71,15 +88,23 @@ class BroadcastPage extends Component
                 'type' => MessageLog::TYPE_TEXT,
                 'phone' => $phone,
                 'message' => $this->message,
-                'status' => MessageLog::STATUS_PENDING,
-                'raw_payload' => ['broadcast' => true],
+                'status' => $scheduledAt ? MessageLog::STATUS_SCHEDULED : MessageLog::STATUS_PENDING,
+                'raw_payload' => array_filter([
+                    'broadcast' => true,
+                    'template_id' => $this->templateId,
+                ]),
+                'scheduled_at' => $scheduledAt,
             ])->id;
         })->all();
 
-        ProcessBroadcastJob::dispatch($logIds, $this->delayMs);
+        if ($scheduledAt && $scheduledAt->isFuture()) {
+            ProcessBroadcastJob::dispatch($logIds, $this->delayMs)->delay($scheduledAt);
+        } else {
+            ProcessBroadcastJob::dispatch($logIds, $this->delayMs);
+        }
 
         $this->currentBatchId = $batchId;
-        $this->reset(['message', 'upload']);
+        $this->reset(['message', 'upload', 'templateId', 'scheduledAt']);
 
         $this->dispatch('message-sent');
 
@@ -93,12 +118,23 @@ class BroadcastPage extends Component
             'message' => ['required', 'string', 'max:1000'],
             'delayMs' => ['required', 'integer', 'min:0', 'max:10000'],
             'upload' => ['required', 'file', 'mimes:csv,txt,xlsx'],
+            'scheduledAt' => ['nullable', 'date'],
+            'templateId' => ['nullable', 'integer', 'exists:message_templates,id'],
         ];
     }
 
     private function deviceOptions()
     {
         return WhatsAppDevice::query()
+            ->select(['id', 'name', 'user_id'])
+            ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
+            ->orderBy('name')
+            ->get();
+    }
+
+    private function templateOptions()
+    {
+        return MessageTemplate::query()
             ->select(['id', 'name', 'user_id'])
             ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
             ->orderBy('name')
@@ -248,6 +284,40 @@ class BroadcastPage extends Component
         return compact('total', 'sent', 'failed');
     }
 
+    public function applyTemplate(): void
+    {
+        if (! $this->templateId) {
+            return;
+        }
+
+        $template = MessageTemplate::query()
+            ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
+            ->findOrFail($this->templateId);
+
+        $this->authorize('view', $template);
+
+        $this->message = $template->body;
+    }
+
+    public function updatedTemplateId(?int $templateId): void
+    {
+        if (! $templateId) {
+            return;
+        }
+
+        $this->applyTemplate();
+    }
+
+    #[On('message-template-applied')]
+    public function onTemplateApplied(string $body, ?string $name = null, ?string $target = null): void
+    {
+        if ($target === 'single') {
+            return;
+        }
+
+        $this->message = $body;
+    }
+
     private function batchLogs(): Collection
     {
         return MessageLog::query()
@@ -256,5 +326,18 @@ class BroadcastPage extends Component
             ->latest()
             ->limit(10)
             ->get();
+    }
+
+    private function parseSchedule(?string $value): ?Carbon
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value)->timezone(config('app.timezone'));
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

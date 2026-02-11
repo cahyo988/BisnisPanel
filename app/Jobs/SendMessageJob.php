@@ -31,7 +31,10 @@ class SendMessageJob implements ShouldQueue
             return;
         }
 
+        if ($log->scheduled_at && $log->scheduled_at->isFuture()) {
+            return;
+        }
+
         $dispatcher->send($log, $this->options);
     }
 }
-

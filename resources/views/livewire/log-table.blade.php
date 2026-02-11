@@ -25,6 +25,7 @@
                 <option value="all">{{ __('All statuses') }}</option>
                 <option value="queued">{{ __('Queued') }}</option>
                 <option value="pending">{{ __('Pending') }}</option>
+                <option value="scheduled">{{ __('Scheduled') }}</option>
                 <option value="sent">{{ __('Sent') }}</option>
                 <option value="failed">{{ __('Failed') }}</option>
                 <option value="delivered">{{ __('Delivered') }}</option>
@@ -57,6 +58,11 @@
                             <td class="font-mono text-xs">{{ $log->phone }}</td>
                             <td>
                                 <p class="text-sm text-[var(--text-primary)]">{{ \Illuminate\Support\Str::limit($log->message, 90) }}</p>
+                                @if ($log->scheduled_at)
+                                    <p class="text-xs text-neutral-400">
+                                        {{ __('Scheduled for :time', ['time' => $log->scheduled_at->format('d M Y - H:i')]) }}
+                                    </p>
+                                @endif
                                 @if ($log->error_message)
                                     <p class="text-xs text-[var(--accent-error)]">{{ $log->error_message }}</p>
                                 @endif
@@ -68,7 +74,8 @@
                                         'bg-emerald-100 text-emerald-700' => in_array($log->status, ['sent', 'delivered', 'read']),
                                         'bg-rose-100 text-rose-700' => $log->status === 'failed',
                                         'bg-amber-100 text-amber-700' => in_array($log->status, ['queued', 'pending']),
-                                        'bg-slate-100 text-slate-600' => ! in_array($log->status, ['pending', 'queued', 'sent', 'delivered', 'read']) && $log->status !== 'failed',
+                                        'bg-sky-100 text-sky-700' => $log->status === 'scheduled',
+                                        'bg-slate-100 text-slate-600' => ! in_array($log->status, ['pending', 'queued', 'scheduled', 'sent', 'delivered', 'read']) && $log->status !== 'failed',
                                     ])">
                                     {{ ucfirst($log->status) }}
                                 </span>
@@ -81,7 +88,7 @@
                                             <circle cx="12" cy="12" r="2.25" />
                                         </svg>
                                     </button>
-                                    <button type="button" class="table-icon-btn" wire:click="$dispatch('retry-log-delivery', { logId: {{ $log->id }} })" title="{{ __('Retry delivery') }}">
+                                    <button type="button" class="table-icon-btn" wire:click="$dispatch('retry-log-delivery', { logId: {{ $log->id }} })" title="{{ __('Retry delivery') }}" @disabled($log->direction !== 'outgoing' || in_array($log->status, ['sent', 'delivered', 'read', 'scheduled'], true))>
                                         <svg class="size-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 4.5v6h6M19.5 19.5v-6h-6M5.25 12A6.75 6.75 0 0 1 12 5.25h.75M18.75 12A6.75 6.75 0 0 1 12 18.75h-.75" />
                                         </svg>

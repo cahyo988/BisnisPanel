@@ -24,9 +24,14 @@ class MessageDispatcher
         try {
             $response = $this->gateway->send($log, $options);
 
+            $gatewayMessageId = $response['message_id'] ?? $response['id'] ?? null;
+
             $log->update([
                 'status' => MessageLog::STATUS_SENT,
                 'raw_payload' => $response,
+                'gateway_message_id' => $gatewayMessageId,
+                'sent_at' => now(),
+                'error_message' => null,
             ]);
         } catch (Throwable $exception) {
             $log->update([
@@ -50,4 +55,3 @@ class MessageDispatcher
         }
     }
 }
-

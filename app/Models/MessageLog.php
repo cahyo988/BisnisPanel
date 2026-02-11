@@ -26,6 +26,7 @@ class MessageLog extends Model
     public const STATUS_FAILED = 'failed';
     public const STATUS_DELIVERED = 'delivered';
     public const STATUS_READ = 'read';
+    public const STATUS_SCHEDULED = 'scheduled';
 
     protected $fillable = [
         'user_id',
@@ -38,6 +39,11 @@ class MessageLog extends Model
         'status',
         'error_message',
         'raw_payload',
+        'scheduled_at',
+        'sent_at',
+        'delivered_at',
+        'read_at',
+        'gateway_message_id',
     ];
 
     /**
@@ -47,6 +53,10 @@ class MessageLog extends Model
     {
         return [
             'raw_payload' => 'array',
+            'scheduled_at' => 'datetime',
+            'sent_at' => 'datetime',
+            'delivered_at' => 'datetime',
+            'read_at' => 'datetime',
         ];
     }
 

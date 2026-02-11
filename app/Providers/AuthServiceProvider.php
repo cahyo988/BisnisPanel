@@ -3,10 +3,12 @@
 namespace App\Providers;
 
 use App\Models\AutoReplyRule;
+use App\Models\MessageTemplate;
 use App\Models\MessageLog;
 use App\Models\PanelNotification;
 use App\Models\WhatsAppDevice;
 use App\Policies\AutoReplyRulePolicy;
+use App\Policies\MessageTemplatePolicy;
 use App\Policies\MessageLogPolicy;
 use App\Policies\PanelNotificationPolicy;
 use App\Policies\WhatsAppDevicePolicy;
@@ -24,6 +26,7 @@ class AuthServiceProvider extends ServiceProvider
         MessageLog::class => MessageLogPolicy::class,
         PanelNotification::class => PanelNotificationPolicy::class,
         AutoReplyRule::class => AutoReplyRulePolicy::class,
+        MessageTemplate::class => MessageTemplatePolicy::class,
     ];
 
     /**
@@ -34,4 +37,3 @@ class AuthServiceProvider extends ServiceProvider
         $this->registerPolicies();
     }
 }
-

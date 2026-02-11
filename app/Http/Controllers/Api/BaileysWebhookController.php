@@ -9,6 +9,7 @@ use App\Models\PanelNotification;
 use App\Models\WhatsAppDevice;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 
 class BaileysWebhookController extends Controller
@@ -89,6 +90,68 @@ class BaileysWebhookController extends Controller
         }
 
         return response()->json(['status' => 'ok']);
+    }
+
+    public function deliveryStatus(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'message_id' => ['nullable', 'string'],
+            'log_id' => ['nullable', 'integer'],
+            'device_id' => ['nullable', 'integer'],
+            'phone' => ['nullable', 'string'],
+            'status' => ['required', 'string', Rule::in(['sent', 'delivered', 'read', 'failed'])],
+            'error' => ['nullable', 'string'],
+            'timestamp' => ['nullable', 'date'],
+        ]);
+
+        if (empty($data['message_id']) && empty($data['log_id']) && empty($data['device_id']) && empty($data['phone'])) {
+            return response()->json(['status' => 'ignored', 'message' => 'No identifiers provided'], 200);
+        }
+
+        $log = MessageLog::query()
+            ->where('direction', MessageLog::DIRECTION_OUTGOING)
+            ->when($data['log_id'] ?? null, fn ($query, $id) => $query->where('id', $id))
+            ->when($data['message_id'] ?? null, fn ($query, $id) => $query->where('gateway_message_id', $id))
+            ->when($data['device_id'] ?? null, fn ($query, $id) => $query->where('whatsapp_device_id', $id))
+            ->when($data['phone'] ?? null, fn ($query, $phone) => $query->where('phone', $phone))
+            ->latest()
+            ->first();
+
+        if (! $log) {
+            return response()->json(['status' => 'ignored', 'message' => 'Log not found'], 200);
+        }
+
+        $timestamp = $data['timestamp'] ? Carbon::parse($data['timestamp']) : now();
+
+        $update = [
+            'status' => $data['status'],
+        ];
+
+        if ($data['status'] === MessageLog::STATUS_SENT) {
+            $update['sent_at'] = $timestamp;
+        }
+
+        if ($data['status'] === MessageLog::STATUS_DELIVERED) {
+            $update['delivered_at'] = $timestamp;
+        }
+
+        if ($data['status'] === MessageLog::STATUS_READ) {
+            $update['read_at'] = $timestamp;
+        }
+
+        if ($data['status'] === MessageLog::STATUS_FAILED) {
+            $update['error_message'] = $data['error'] ?? $log->error_message;
+        } else {
+            $update['error_message'] = null;
+        }
+
+        if ($data['message_id'] ?? null) {
+            $update['gateway_message_id'] = $data['message_id'];
+        }
+
+        $log->update($update);
+
+        return response()->json(['status' => 'ok', 'log_id' => $log->id]);
     }
 
     private function resolveDevice(?int $deviceId, ?string $phoneNumber): ?WhatsAppDevice

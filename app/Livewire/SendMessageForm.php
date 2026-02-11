@@ -4,12 +4,15 @@ namespace App\Livewire;
 
 use App\Jobs\SendMessageJob;
 use App\Models\MessageLog;
+use App\Models\MessageTemplate;
 use App\Models\WhatsAppDevice;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -24,17 +27,31 @@ class SendMessageForm extends Component
     public string $message = '';
     public ?string $mediaUrl = null;
     public $mediaFile;
+    public ?int $templateId = null;
+    public ?string $scheduledAt = null;
 
     public function render(): View
     {
         return view('livewire.send-message-form', [
             'devices' => $this->deviceOptions(),
+            'templates' => $this->templateOptions(),
         ]);
     }
 
     public function send(): void
     {
         $validated = $this->validate($this->rules());
+
+        if ($this->templateId) {
+            $this->applyTemplate();
+        }
+
+        $scheduledAt = $this->parseSchedule($validated['scheduledAt'] ?? null);
+
+        if ($validated['type'] === MessageLog::TYPE_TEXT && blank($this->message)) {
+            $this->addError('message', __('Message body is required.'));
+            return;
+        }
 
         if ($validated['type'] === MessageLog::TYPE_IMAGE && blank($validated['mediaUrl']) && ! $this->mediaFile) {
             $this->addError('mediaUrl', 'Provide a media URL or upload a file.');
@@ -57,20 +74,29 @@ class SendMessageForm extends Component
             $rawPayload['media_path'] = $this->mediaFile->store('whatsapp-media', 'public');
         }
 
+        if ($this->templateId) {
+            $rawPayload['template_id'] = $this->templateId;
+        }
+
         $log = MessageLog::create([
             'user_id' => $device->user_id,
             'whatsapp_device_id' => $device->id,
             'direction' => MessageLog::DIRECTION_OUTGOING,
             'type' => $validated['type'],
             'phone' => $this->normalizePhone($validated['phone']),
-            'message' => $validated['message'] ?? $validated['mediaUrl'] ?? 'Media message',
-            'status' => MessageLog::STATUS_PENDING,
+            'message' => $this->message ?: $validated['mediaUrl'] ?? 'Media message',
+            'status' => $scheduledAt ? MessageLog::STATUS_SCHEDULED : MessageLog::STATUS_PENDING,
             'raw_payload' => $rawPayload,
+            'scheduled_at' => $scheduledAt,
         ]);
 
-        SendMessageJob::dispatch($log->id);
+        if ($scheduledAt && $scheduledAt->isFuture()) {
+            SendMessageJob::dispatch($log->id)->delay($scheduledAt);
+        } else {
+            SendMessageJob::dispatch($log->id);
+        }
 
-        $this->reset(['phone', 'message', 'mediaUrl', 'mediaFile']);
+        $this->reset(['phone', 'message', 'mediaUrl', 'mediaFile', 'templateId', 'scheduledAt']);
 
         $this->dispatch('message-sent', logId: $log->id);
 
@@ -96,6 +122,8 @@ class SendMessageForm extends Component
             ],
             'mediaUrl' => ['nullable', 'url'],
             'mediaFile' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
+            'templateId' => ['nullable', 'integer', 'exists:message_templates,id'],
+            'scheduledAt' => ['nullable', 'date'],
         ];
     }
 
@@ -108,6 +136,40 @@ class SendMessageForm extends Component
             ->get();
     }
 
+    public function applyTemplate(): void
+    {
+        if (! $this->templateId) {
+            return;
+        }
+
+        $template = MessageTemplate::query()
+            ->tap(fn (Builder $builder) => $this->applyTemplateScope($builder))
+            ->findOrFail($this->templateId);
+
+        $this->authorize('view', $template);
+
+        $this->message = $template->body;
+    }
+
+    public function updatedTemplateId(?int $templateId): void
+    {
+        if (! $templateId) {
+            return;
+        }
+
+        $this->applyTemplate();
+    }
+
+    #[On('message-template-applied')]
+    public function onTemplateApplied(string $body, ?string $name = null, ?string $target = null): void
+    {
+        if ($target === 'broadcast') {
+            return;
+        }
+
+        $this->message = $body;
+    }
+
     private function applyUserScope(Builder $builder): Builder
     {
         $viewer = auth()->user();
@@ -117,6 +179,39 @@ class SendMessageForm extends Component
         }
 
         return $builder;
+    }
+
+    private function applyTemplateScope(Builder $builder): Builder
+    {
+        $viewer = auth()->user();
+
+        if (! $viewer->isAdmin()) {
+            $builder->where('user_id', $viewer->id);
+        }
+
+        return $builder;
+    }
+
+    private function templateOptions()
+    {
+        return MessageTemplate::query()
+            ->select(['id', 'name', 'user_id'])
+            ->tap(fn (Builder $builder) => $this->applyTemplateScope($builder))
+            ->orderBy('name')
+            ->get();
+    }
+
+    private function parseSchedule(?string $value): ?Carbon
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value)->timezone(config('app.timezone'));
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function normalizePhone(string $phone): string

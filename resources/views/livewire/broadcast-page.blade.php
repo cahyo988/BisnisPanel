@@ -27,8 +27,36 @@
             </div>
         </div>
 
+        <div class="grid gap-4 md:grid-cols-2">
+            <div>
+                <label class="text-sm font-medium text-neutral-700">{{ __('Message Template') }}</label>
+                <select wire:model="templateId" class="panel-select mt-1">
+                    <option value="">{{ __('Select template…') }}</option>
+                    @if ($templates->isEmpty())
+                        <option value="" disabled>{{ __('No templates yet') }}</option>
+                    @else
+                        @foreach ($templates as $template)
+                            <option value="{{ $template->id }}">{{ $template->name }}</option>
+                        @endforeach
+                    @endif
+                </select>
+                @error('templateId') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                @if ($templates->isEmpty())
+                    <p class="mt-1 text-xs text-neutral-500">
+                        <a href="#message-templates" class="font-medium text-[var(--primary)] hover:underline">{{ __('Create a template') }}</a>
+                        {{ __('to reuse message bodies.') }}
+                    </p>
+                @endif
+            </div>
+            <div>
+                <label class="text-sm font-medium text-neutral-700">{{ __('Schedule Time (optional)') }}</label>
+                <input type="datetime-local" wire:model.defer="scheduledAt" step="60" class="panel-input mt-1" />
+                @error('scheduledAt') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+            </div>
+        </div>
+
         <div>
-            <label class="text-sm font-medium text-neutral-700">{{ __('Message Template') }}</label>
+            <label class="text-sm font-medium text-neutral-700">{{ __('Message Body') }}</label>
             <textarea wire:model.defer="message" rows="4" class="panel-input mt-1" placeholder="{{ __('Hi :name, thanks for contacting us…', ['name' => '{name}']) }}"></textarea>
             @error('message') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
         </div>
@@ -52,12 +80,12 @@
         </div>
     </form>
 
-    @if ($progress)
-        <div class="mt-8 space-y-2" wire:poll.5s>
-            <div class="flex items-center justify-between text-sm text-neutral-600">
-                <span>{{ __('Progress') }}</span>
-                <span>{{ $progress['sent'] }} / {{ $progress['total'] }} {{ __('sent') }}</span>
-            </div>
+        @if ($progress)
+            <div class="mt-8 space-y-2" wire:poll.5s>
+                <div class="flex items-center justify-between text-sm text-neutral-600">
+                    <span>{{ __('Progress') }}</span>
+                    <span>{{ $progress['sent'] }} / {{ $progress['total'] }} {{ __('sent') }}</span>
+                </div>
             <div class="h-3 w-full overflow-hidden rounded-full bg-slate-200">
                 <div class="h-full bg-emerald-500 transition-all" style="width: {{ min(100, ($progress['sent'] / $progress['total']) * 100) }}%"></div>
             </div>

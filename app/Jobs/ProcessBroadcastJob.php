@@ -35,6 +35,10 @@ class ProcessBroadcastJob implements ShouldQueue
                 continue;
             }
 
+            if ($log->scheduled_at && $log->scheduled_at->isFuture()) {
+                continue;
+            }
+
             $dispatcher->send($log);
 
             if ($this->delayMs > 0) {
@@ -43,4 +47,3 @@ class ProcessBroadcastJob implements ShouldQueue
         }
     }
 }
-

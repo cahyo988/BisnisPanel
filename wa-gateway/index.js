@@ -167,6 +167,23 @@ async function sendIncomingWebhook(payload) {
   }
 }
 
+async function sendDeliveryWebhook(payload) {
+  if (!WEBHOOK_TOKEN) {
+    logger.warn('WHATSAPP_WEBHOOK_TOKEN is empty; delivery webhook skipped');
+    return;
+  }
+
+  try {
+    await axios.post(`${PANEL_BASE_URL}/api/webhooks/baileys/messages/status`, payload, {
+      headers: {
+        'X-Webhook-Token': WEBHOOK_TOKEN,
+      },
+    });
+  } catch (error) {
+    logger.error({ error: error.message, payload }, 'Delivery webhook failed');
+  }
+}
+
 async function startDeviceSession(deviceId, devicePhone, name) {
   if (sessions.has(deviceId)) {
     return sessions.get(deviceId);
@@ -481,7 +498,7 @@ app.post('/devices/disconnect', requireGatewayToken, async (req, res) => {
 });
 
 app.post('/messages', requireGatewayToken, async (req, res) => {
-  const { device_id: deviceId, to, type, message } = req.body || {};
+  const { device_id: deviceId, to, type, message, log_id: logId } = req.body || {};
 
   if (!deviceId || !to) {
     return res.status(422).json({ error: 'device_id and to are required' });
@@ -501,11 +518,34 @@ app.post('/messages', requireGatewayToken, async (req, res) => {
   const jid = normalized.includes('@') ? normalized : `${normalized}@s.whatsapp.net`;
 
   try {
-    await sock.sendMessage(jid, { text: message || '' });
+    const response = await sock.sendMessage(jid, { text: message || '' });
+    const messageId = response?.key?.id || null;
 
-    return res.json({ status: 'sent' });
+    if (logId || messageId) {
+      await sendDeliveryWebhook({
+        log_id: logId || null,
+        message_id: messageId,
+        device_id: deviceId,
+        phone: normalized,
+        status: 'sent',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    return res.json({ status: 'sent', message_id: messageId });
   } catch (error) {
     logger.error({ error: error.message }, 'Failed to send message');
+
+    if (logId) {
+      await sendDeliveryWebhook({
+        log_id: logId,
+        device_id: deviceId,
+        phone: normalized,
+        status: 'failed',
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     return res.status(500).json({ error: 'Failed to send message' });
   }

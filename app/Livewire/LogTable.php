@@ -4,13 +4,19 @@ namespace App\Livewire;
 
 use App\Models\MessageLog;
 use App\Models\User;
+use App\Services\MessageDispatcher;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Facades\Log;
 use Livewire\Component;
+use Livewire\Attributes\On;
 use Livewire\WithPagination;
+use Throwable;
 
 class LogTable extends Component
 {
+    use AuthorizesRequests;
     use WithPagination;
 
     public string $status = 'all';
@@ -60,6 +66,55 @@ class LogTable extends Component
                 ? User::query()->orderBy('name')->get(['id', 'name'])
                 : collect(),
         ]);
+    }
+
+    #[On('retry-log-delivery')]
+    public function retryDelivery(int $logId, MessageDispatcher $dispatcher): void
+    {
+        try {
+            $log = MessageLog::query()
+                ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
+                ->findOrFail($logId);
+
+            $this->authorize('update', $log);
+
+            if ($log->direction !== MessageLog::DIRECTION_OUTGOING) {
+                $this->dispatchBrowserEvent('notify', [
+                    'type' => 'error',
+                    'message' => __('Only outgoing messages can be retried.'),
+                ]);
+
+                return;
+            }
+
+            if ($log->scheduled_at && $log->scheduled_at->isFuture()) {
+                $this->dispatchBrowserEvent('notify', [
+                    'type' => 'error',
+                    'message' => __('Scheduled messages cannot be retried until due.'),
+                ]);
+
+                return;
+            }
+
+            dispatch(function () use ($dispatcher, $log): void {
+                $dispatcher->send($log);
+            })->afterResponse();
+
+            $this->dispatchBrowserEvent('notify', [
+                'type' => 'success',
+                'message' => __('Retry queued. The gateway will resend shortly.'),
+            ]);
+        } catch (Throwable $exception) {
+            Log::error('Failed to retry message delivery', [
+                'log_id' => $logId,
+                'message' => $exception->getMessage(),
+            ]);
+
+            $this->dispatchBrowserEvent('notify', [
+                'type' => 'error',
+                'message' => __('Failed to retry delivery.'),
+            ]);
+        }
     }
 
     private function logs()

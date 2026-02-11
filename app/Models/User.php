@@ -114,4 +114,12 @@ class User extends Authenticatable
     {
         return $this->hasMany(AutoReplyRule::class);
     }
+
+    /**
+     * @return HasMany<MessageTemplate>
+     */
+    public function messageTemplates(): HasMany
+    {
+        return $this->hasMany(MessageTemplate::class);
+    }
 }

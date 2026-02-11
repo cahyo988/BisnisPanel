@@ -94,3 +94,30 @@ it('updates device status via webhook', function (): void {
         'type' => 'device',
     ]);
 });
+
+it('updates delivery status for outgoing logs', function (): void {
+    $user = User::factory()->create();
+    $device = WhatsAppDevice::factory()->for($user)->create();
+
+    $log = MessageLog::factory()->create([
+        'user_id' => $user->id,
+        'whatsapp_device_id' => $device->id,
+        'direction' => MessageLog::DIRECTION_OUTGOING,
+        'status' => MessageLog::STATUS_PENDING,
+    ]);
+
+    $payload = [
+        'log_id' => $log->id,
+        'status' => 'delivered',
+        'timestamp' => Carbon::now()->toISOString(),
+    ];
+
+    $this->postJson('/api/webhooks/baileys/messages/status', $payload, ['X-Webhook-Token' => 'secret-token'])
+        ->assertOk()
+        ->assertJsonPath('status', 'ok');
+
+    $this->assertDatabaseHas('message_logs', [
+        'id' => $log->id,
+        'status' => MessageLog::STATUS_DELIVERED,
+    ]);
+});
