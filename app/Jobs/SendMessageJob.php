@@ -17,6 +17,9 @@ class SendMessageJob implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
+    /**
+     * @param  array<string, mixed>  $options
+     */
     public function __construct(
         private readonly int $messageLogId,
         private readonly array $options = []

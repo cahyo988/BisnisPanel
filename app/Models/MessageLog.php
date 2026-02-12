@@ -19,6 +19,7 @@ class MessageLog extends Model
     public const TYPE_IMAGE = 'image';
     public const TYPE_DOCUMENT = 'document';
     public const TYPE_BUTTON = 'button';
+    public const TYPE_LIST = 'list';
 
     public const STATUS_PENDING = 'pending';
     public const STATUS_QUEUED = 'queued';

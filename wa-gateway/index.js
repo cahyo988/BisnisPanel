@@ -314,7 +314,12 @@ async function startDeviceSession(deviceId, devicePhone, name) {
       let messageType = 'text';
       let text = '';
 
-      if (message.message.conversation) {
+      const listResponse = message.message.listResponseMessage;
+
+      if (listResponse?.singleSelectReply?.selectedRowId) {
+        messageType = 'list';
+        text = listResponse.title || '';
+      } else if (message.message.conversation) {
         text = message.message.conversation;
       } else if (message.message.extendedTextMessage?.text) {
         text = message.message.extendedTextMessage.text;
@@ -340,6 +345,8 @@ async function startDeviceSession(deviceId, devicePhone, name) {
         push_name: message.pushName || null,
         type: messageType,
         message: text,
+        selected_id: listResponse?.singleSelectReply?.selectedRowId || null,
+        selected_text: listResponse?.title || null,
       });
 
       logger.info(
@@ -541,14 +548,24 @@ app.post('/devices/disconnect', requireGatewayToken, async (req, res) => {
 });
 
 app.post('/messages', requireGatewayToken, async (req, res) => {
-  const { device_id: deviceId, to, type, message, log_id: logId } = req.body || {};
+  const {
+    device_id: deviceId,
+    to,
+    type,
+    message,
+    buttons,
+    log_id: logId,
+    raw_payload: rawPayload,
+  } = req.body || {};
 
   if (!deviceId || !to) {
     return res.status(422).json({ error: 'device_id and to are required' });
   }
 
-  if (type && type !== 'text') {
-    return res.status(422).json({ error: 'Only text messages are supported in minimal gateway.' });
+  const normalizedType = type || 'text';
+
+  if (!['text', 'button', 'buttons', 'list'].includes(normalizedType)) {
+    return res.status(422).json({ error: 'Unsupported message type.' });
   }
 
   const sock = sessions.get(deviceId);
@@ -561,7 +578,95 @@ app.post('/messages', requireGatewayToken, async (req, res) => {
   const jid = normalized.includes('@') ? normalized : `${normalized}@s.whatsapp.net`;
 
   try {
-    const response = await sock.sendMessage(jid, { text: message || '' });
+    let payload = { text: message || '' };
+
+    if (normalizedType === 'button' || normalizedType === 'buttons') {
+      const resolvedButtons = Array.isArray(buttons)
+        ? buttons
+        : Array.isArray(rawPayload?.buttons)
+          ? rawPayload.buttons
+          : [];
+      const items = resolvedButtons.slice(0, 3);
+
+      logger.info(
+        { deviceId, to: normalized, buttonCount: resolvedButtons.length, items },
+        'Preparing button message payload'
+      );
+
+      if (items.length === 0) {
+        return res.status(422).json({ error: 'Buttons payload is required.' });
+      }
+
+      payload = {
+        text: message || 'Pilih salah satu opsi:',
+        buttons: items.map((button, index) => {
+          const id = button?.id ?? `option_${index + 1}`;
+          const label = button?.text ?? button?.label ?? String(id);
+
+          return {
+            buttonId: String(id),
+            buttonText: { displayText: String(label) },
+            type: 1,
+          };
+        }),
+        headerType: 1,
+      };
+    }
+
+    if (normalizedType === 'list') {
+      const resolvedButtons = Array.isArray(buttons)
+        ? buttons
+        : Array.isArray(rawPayload?.buttons)
+          ? rawPayload.buttons
+          : [];
+
+      if (resolvedButtons.length === 0) {
+        return res.status(422).json({ error: 'Buttons payload is required.' });
+      }
+
+      const rows = resolvedButtons.map((button, index) => {
+        const id = button?.id ?? `option_${index + 1}`;
+        const label = button?.text ?? button?.label ?? String(id);
+        const description = button?.description ? String(button.description) : null;
+
+        return {
+          rowId: String(id),
+          title: String(label),
+          ...(description ? { description } : {}),
+        };
+      });
+
+      logger.info(
+        { deviceId, to: normalized, rowCount: rows.length, rows },
+        'Preparing list message payload'
+      );
+
+      payload = {
+        text: message || 'Pilih salah satu opsi:',
+        title: 'Menu',
+        footer: 'Silakan pilih salah satu opsi',
+        buttonText: 'Pilih',
+        listType: 1,
+        sections: [
+          {
+            title: 'Menu',
+            rows,
+          },
+        ],
+      };
+    }
+
+    logger.info(
+      {
+        deviceId,
+        to: normalized,
+        payloadType: normalizedType,
+        buttonCount: Array.isArray(payload.buttons) ? payload.buttons.length : 0,
+      },
+      'Sending WhatsApp message'
+    );
+
+    const response = await sock.sendMessage(jid, payload);
     const messageId = response?.key?.id || null;
 
     if (logId || messageId) {

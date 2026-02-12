@@ -40,6 +40,15 @@
             @error('session') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
         </div>
 
+        <div>
+            <label class="text-sm font-medium text-neutral-700">{{ __('Auto Reply Greeting (optional)') }}</label>
+            <textarea wire:model.defer="autoReplyGreeting" rows="3" class="panel-input mt-1" placeholder="{{ __('Hi, welcome to Severo. How can we help?') }}"></textarea>
+            @error('autoReplyGreeting') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+            <p class="mt-1 text-xs text-neutral-500">
+                {{ __('This message is sent automatically before the menu when someone chats your device.') }}
+            </p>
+        </div>
+
         <div class="flex justify-end">
             <flux:button type="submit" variant="primary">{{ __('Save Device') }}</flux:button>
         </div>

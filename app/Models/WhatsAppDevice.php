@@ -21,6 +21,8 @@ class WhatsAppDevice extends Model
         'phone_number',
         'status',
         'session',
+        'auto_reply_greeting',
+        'auto_reply_menu',
         'last_connected_at',
         'last_seen_at',
     ];
@@ -32,6 +34,7 @@ class WhatsAppDevice extends Model
     {
         return [
             'session' => 'array',
+            'auto_reply_menu' => 'array',
             'last_connected_at' => 'datetime',
             'last_seen_at' => 'datetime',
         ];

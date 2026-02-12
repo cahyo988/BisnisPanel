@@ -18,6 +18,7 @@ class DeviceCreate extends Component
     public string $phone_number = '';
     public ?string $session = null;
     public ?int $selectedUserId = null;
+    public string $autoReplyGreeting = '';
 
     public function mount(): void
     {
@@ -51,11 +52,13 @@ class DeviceCreate extends Component
             'phone_number' => $this->normalizePhone($validated['phone_number']),
             'status' => 'disconnected',
             'session' => $sessionPayload,
+            'auto_reply_greeting' => $validated['autoReplyGreeting'] ?? null,
+            'auto_reply_menu' => $this->defaultMenu(),
         ]);
 
         $this->dispatch('device-created', deviceId: $device->id);
 
-        $this->reset(['name', 'phone_number', 'session']);
+        $this->reset(['name', 'phone_number', 'session', 'autoReplyGreeting']);
 
         if ($user->isAdmin()) {
             $this->selectedUserId = null;
@@ -76,6 +79,7 @@ class DeviceCreate extends Component
                 Rule::unique('whatsapp_devices', 'phone_number'),
             ],
             'session' => ['nullable', 'string'],
+            'autoReplyGreeting' => ['nullable', 'string', 'max:500'],
             'selectedUserId' => auth()->user()->isAdmin()
                 ? ['required', 'integer', 'exists:users,id']
                 : ['nullable'],
@@ -102,5 +106,42 @@ class DeviceCreate extends Component
     private function normalizePhone(string $phone): string
     {
         return preg_replace('/[^0-9\+]/', '', $phone);
+    }
+
+    private function defaultMenu(): array
+    {
+        return [
+            'root' => [
+                'text' => 'Pilih layanan yang kamu butuhkan:',
+                'buttons' => [
+                    ['id' => 'harga', 'text' => 'Harga'],
+                    ['id' => 'joki', 'text' => 'Joki'],
+                    ['id' => 'topup', 'text' => 'Topup'],
+                ],
+            ],
+            'joki' => [
+                'text' => 'Pilih tier joki yang kamu inginkan:',
+                'buttons' => [
+                    ['id' => 'mythic', 'text' => 'Mythic'],
+                    ['id' => 'legend', 'text' => 'Legend'],
+                    ['id' => 'epic', 'text' => 'Epic'],
+                ],
+            ],
+            'harga' => [
+                'text' => 'Dummy harga: Paket mulai Rp 50.000. Ketik INFO untuk kembali ke menu.',
+            ],
+            'topup' => [
+                'text' => 'Dummy topup: Diamond mulai Rp 10.000. Ketik INFO untuk kembali ke menu.',
+            ],
+            'mythic' => [
+                'text' => 'Dummy joki tier Mythic: silakan hubungi admin untuk detail. Ketik INFO untuk menu.',
+            ],
+            'legend' => [
+                'text' => 'Dummy joki tier Legend: silakan hubungi admin untuk detail. Ketik INFO untuk menu.',
+            ],
+            'epic' => [
+                'text' => 'Dummy joki tier Epic: silakan hubungi admin untuk detail. Ketik INFO untuk menu.',
+            ],
+        ];
     }
 }
