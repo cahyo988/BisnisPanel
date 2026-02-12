@@ -65,11 +65,21 @@
                 @error('scheduledAt') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
             </div>
         </div>
-        @if ($templateId)
-            <p class="text-xs text-neutral-500">
-                {{ __('Template applied to the message body.') }}
-            </p>
-        @endif
+
+        <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 space-y-2">
+            <label class="flex items-center gap-3 text-sm text-neutral-700">
+                <input id="single-use-contact-names" type="checkbox" wire:model="useContactNames" class="size-4 rounded border-slate-300 text-[var(--primary)] focus:ring-[var(--primary)]" />
+                {{ __('Use contact name from recent chats when {name} is used') }}
+            </label>
+            <div class="space-y-1 text-xs text-neutral-500">
+                @if ($templateId)
+                    <p>{{ __('Template applied to the message body.') }}</p>
+                @endif
+                @if ($contactName)
+                    <p>{{ __('Contact name detected: :name', ['name' => $contactName]) }}</p>
+                @endif
+            </div>
+        </div>
 
         @if ($type === 'text')
             <div>

@@ -109,6 +109,44 @@ function normalizePhone(value) {
   return digits;
 }
 
+function isGroupJid(jid) {
+  return typeof jid === 'string' && jid.endsWith('@g.us');
+}
+
+async function clearBadMacSession(sock, deviceId, message) {
+  const params = message?.messageStubParameters || [];
+  const hasBadMac = params.some((param) => /bad mac/i.test(String(param)));
+
+  if (!hasBadMac) {
+    return false;
+  }
+
+  const remoteJid = message?.key?.remoteJid || '';
+  const participant = message?.key?.participant || '';
+  const targetJid = participant || remoteJid;
+
+  if (!targetJid || isGroupJid(targetJid)) {
+    logger.warn({ deviceId, targetJid }, 'Bad MAC detected for group/unknown jid');
+    return true;
+  }
+
+  try {
+    const signalId = sock.signalRepository?.jidToSignalProtocolAddress?.(targetJid);
+
+    if (!signalId) {
+      logger.warn({ deviceId, targetJid }, 'Bad MAC detected but session id missing');
+      return true;
+    }
+
+    await sock.authState.keys.set({ session: { [signalId]: null } });
+    logger.warn({ deviceId, targetJid, signalId }, 'Cleared session after Bad MAC');
+  } catch (error) {
+    logger.warn({ deviceId, targetJid, error: error.message }, 'Failed to clear session after Bad MAC');
+  }
+
+  return true;
+}
+
 function resolveSenderJid(message) {
   const keyParticipant = message?.key?.participant;
   const msgParticipant = message?.participant;
@@ -260,6 +298,10 @@ async function startDeviceSession(deviceId, devicePhone, name) {
     }
 
     for (const message of messages) {
+      if (await clearBadMacSession(sock, deviceId, message)) {
+        continue;
+      }
+
       if (!message.message || message.key.fromMe) {
         continue;
       }
@@ -295,6 +337,7 @@ async function startDeviceSession(deviceId, devicePhone, name) {
         device_id: deviceId,
         device_phone: devicePhone || parsePhone(sock.user?.id) || null,
         from,
+        push_name: message.pushName || null,
         type: messageType,
         message: text,
       });

@@ -22,6 +22,7 @@ class BaileysWebhookController extends Controller
             'from' => ['required', 'string'],
             'type' => ['required', 'string', Rule::in(['text', 'image', 'document', 'button'])],
             'message' => ['nullable', 'string'],
+            'push_name' => ['nullable', 'string'],
         ]);
 
         $device = $this->resolveDevice($data['device_id'] ?? null, $data['device_phone'] ?? null);

@@ -29,12 +29,16 @@ class SendMessageForm extends Component
     public $mediaFile;
     public ?int $templateId = null;
     public ?string $scheduledAt = null;
+    public bool $useContactNames = true;
 
     public function render(): View
     {
         return view('livewire.send-message-form', [
             'devices' => $this->deviceOptions(),
             'templates' => $this->templateOptions(),
+            'contactName' => $this->useContactNames
+                ? $this->resolveContactName($this->deviceId, $this->phone)
+                : null,
         ]);
     }
 
@@ -65,9 +69,15 @@ class SendMessageForm extends Component
 
         $this->authorize('view', $device);
 
+        $contactName = $this->useContactNames
+            ? $this->resolveContactName($device->id, $validated['phone'])
+            : null;
+        $this->message = $this->renderMessageWithName($this->message, $contactName, $validated['phone']);
+
         $rawPayload = [
             'type' => $validated['type'],
             'media_url' => $validated['mediaUrl'],
+            'contact_name' => $contactName,
         ];
 
         if ($this->mediaFile) {
@@ -115,10 +125,10 @@ class SendMessageForm extends Component
             ])],
             'phone' => ['required', 'string', 'max:20'],
             'message' => [
-                Rule::requiredIf(fn () => $this->type === MessageLog::TYPE_TEXT),
+                Rule::requiredIf(fn () => $this->type === MessageLog::TYPE_TEXT && blank($this->templateId)),
                 'nullable',
                 'string',
-                'max:1000',
+                'max:2000',
             ],
             'mediaUrl' => ['nullable', 'url'],
             'mediaFile' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
@@ -219,5 +229,38 @@ class SendMessageForm extends Component
         $normalized = preg_replace('/[^0-9\+]/', '', $phone);
 
         return Str::startsWith($normalized, '+') ? $normalized : '+'.$normalized;
+    }
+
+    private function resolveContactName(?int $deviceId, ?string $phone): ?string
+    {
+        if (! $deviceId || blank($phone)) {
+            return null;
+        }
+
+        $normalized = $this->normalizePhone($phone);
+
+        $log = MessageLog::query()
+            ->where('direction', MessageLog::DIRECTION_INCOMING)
+            ->where('whatsapp_device_id', $deviceId)
+            ->where('phone', $normalized)
+            ->latest()
+            ->first();
+
+        $payload = $log?->raw_payload;
+
+        return is_array($payload) && filled($payload['push_name'] ?? null)
+            ? (string) $payload['push_name']
+            : null;
+    }
+
+    private function renderMessageWithName(string $message, ?string $name, string $fallbackPhone): string
+    {
+        if (blank($message)) {
+            return $message;
+        }
+
+        $replacement = $name ?: $fallbackPhone;
+
+        return str_ireplace(['{name}', '{{name}}'], $replacement, $message);
     }
 }

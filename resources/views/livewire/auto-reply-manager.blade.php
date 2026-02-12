@@ -98,37 +98,63 @@
         </div>
     </form>
 
-    <div class="mt-8">
-        <h4 class="text-sm font-semibold text-neutral-700">{{ __('Existing Rules') }}</h4>
+    <div class="mt-8 space-y-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h4 class="text-sm font-semibold text-neutral-700">{{ __('Existing Rules') }}</h4>
+                <p class="text-xs text-neutral-500">
+                    {{ __('Grouped by device for easier management.') }}
+                </p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <select wire:model.live="filterDeviceId" class="panel-select text-sm sm:w-56">
+                    <option value="">{{ __('All Devices') }}</option>
+                    @foreach ($devices as $device)
+                        <option value="{{ $device->id }}">{{ $device->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
 
         @if ($rules->isEmpty())
             <div class="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-neutral-500">
                 {{ __('No rules have been created yet.') }}
             </div>
         @else
-            <div class="mt-4 grid gap-4 md:grid-cols-2">
-                @foreach ($rules as $rule)
-                    <div class="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
-                        <div class="flex items-start justify-between gap-3">
+            <div class="space-y-4">
+                @foreach ($groupedRules as $deviceName => $deviceRules)
+                    <div class="rounded-2xl border border-slate-200 bg-white">
+                        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
                             <div>
-                                <p class="text-sm font-semibold text-neutral-900">{{ $rule->keyword }}</p>
-                                <p class="text-xs uppercase tracking-wide text-neutral-400">{{ $rule->match_mode }}</p>
+                                <p class="text-sm font-semibold text-neutral-900">{{ $deviceName }}</p>
+                                <p class="text-xs text-neutral-500">{{ trans_choice('{0} No rules|{1} :count rule|[2,*] :count rules', $deviceRules->count(), ['count' => $deviceRules->count()]) }}</p>
                             </div>
-                            <span class="panel-pill {{ $rule->is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600' }}">
-                                {{ $rule->is_active ? __('Active') : __('Paused') }}
+                            <span class="panel-pill bg-slate-100 text-slate-600">
+                                {{ $deviceRules->count() }}
                             </span>
                         </div>
-                        <p class="mt-3 text-xs text-neutral-500">{{ __('Device: :name', ['name' => $rule->device->name ?? __('Unknown')]) }}</p>
-                        <p class="mt-2 text-sm text-neutral-700">{{ \Illuminate\Support\Str::limit($rule->reply_text, 120) }}</p>
-                        <div class="mt-4 flex flex-wrap gap-2 text-xs text-neutral-400">
-                            <span>{{ __('Updated :date', ['date' => $rule->updated_at->diffForHumans()]) }}</span>
-                        </div>
-                        <div class="mt-4 flex flex-wrap gap-2">
-                            <flux:button size="sm" variant="outline" wire:click="toggle({{ $rule->id }})">
-                                {{ $rule->is_active ? __('Pause') : __('Activate') }}
-                            </flux:button>
-                            <flux:button size="sm" wire:click="edit({{ $rule->id }})">{{ __('Edit') }}</flux:button>
-                            <flux:button size="sm" variant="danger" wire:click="delete({{ $rule->id }})">{{ __('Delete') }}</flux:button>
+                        <div class="divide-y divide-slate-200">
+                            @foreach ($deviceRules as $rule)
+                                <div class="flex flex-col gap-3 px-4 py-4 md:flex-row md:items-center md:justify-between">
+                                    <div>
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <p class="text-sm font-semibold text-neutral-900">{{ $rule->keyword }}</p>
+                                            <span class="text-[11px] uppercase tracking-wide text-neutral-400">{{ $rule->match_mode }}</span>
+                                            <span class="panel-pill {{ $rule->is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600' }}">
+                                                {{ $rule->is_active ? __('Active') : __('Paused') }}
+                                            </span>
+                                        </div>
+                                        <p class="mt-2 text-sm text-neutral-700">{{ \Illuminate\Support\Str::limit($rule->reply_text, 120) }}</p>
+                                    </div>
+                                    <div class="flex flex-wrap gap-2">
+                                        <flux:button size="sm" variant="outline" wire:click="toggle({{ $rule->id }})">
+                                            {{ $rule->is_active ? __('Pause') : __('Activate') }}
+                                        </flux:button>
+                                        <flux:button size="sm" wire:click="edit({{ $rule->id }})">{{ __('Edit') }}</flux:button>
+                                        <flux:button size="sm" variant="danger" wire:click="delete({{ $rule->id }})">{{ __('Delete') }}</flux:button>
+                                    </div>
+                                </div>
+                            @endforeach
                         </div>
                     </div>
                 @endforeach

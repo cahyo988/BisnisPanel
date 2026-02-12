@@ -1,11 +1,11 @@
 <div class="panel-card space-y-6" wire:poll.5s>
-    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div class="flex flex-col gap-4">
         <div>
             <h3 class="panel-section-title">{{ __('Message Intelligence') }}</h3>
             <p class="panel-section-subtitle">{{ __('Consolidated feed of all messaging activity across devices.') }}</p>
         </div>
 
-        <div class="grid gap-3 md:grid-cols-2 lg:flex lg:flex-1 lg:items-center lg:justify-end">
+        <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
             @if ($userOptions->isNotEmpty())
                 <select wire:model.live="selectedUserId" class="panel-select md:w-48">
                     <option value="">{{ __('All users') }}</option>
@@ -32,7 +32,7 @@
                 <option value="read">{{ __('Read') }}</option>
             </select>
 
-            <input type="text" wire:model.live="search" placeholder="{{ __('Search phone or message...') }}" class="panel-input md:w-56" />
+            <input type="text" wire:model.live="search" placeholder="{{ __('Search phone or message...') }}" class="panel-input md:w-56 lg:col-span-2" />
         </div>
     </div>
 

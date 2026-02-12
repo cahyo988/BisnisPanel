@@ -55,6 +55,18 @@
             </div>
         </div>
 
+        <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 space-y-2">
+            <label class="flex items-center gap-3 text-sm text-neutral-700">
+                <input id="use-contact-names" type="checkbox" wire:model="useContactNames" class="size-4 rounded border-slate-300 text-[var(--primary)] focus:ring-[var(--primary)]" />
+                {{ __('Use contact name from recent chats when {name} is used') }}
+            </label>
+            @if (! empty($nameMap))
+                <p class="text-xs text-neutral-500">
+                    {{ __('Contact names are pulled from recent incoming chats for this device. Unknown names fall back to the phone number.') }}
+                </p>
+            @endif
+        </div>
+
         <div>
             <label class="text-sm font-medium text-neutral-700">{{ __('Message Body') }}</label>
             <textarea wire:model.defer="message" rows="4" class="panel-input mt-1" placeholder="{{ __('Hi :name, thanks for contacting us…', ['name' => '{name}']) }}"></textarea>
@@ -86,12 +98,12 @@
                     <span>{{ __('Progress') }}</span>
                     <span>{{ $progress['sent'] }} / {{ $progress['total'] }} {{ __('sent') }}</span>
                 </div>
-            <div class="h-3 w-full overflow-hidden rounded-full bg-slate-200">
-                <div class="h-full bg-emerald-500 transition-all" style="width: {{ min(100, ($progress['sent'] / $progress['total']) * 100) }}%"></div>
+                <div class="h-3 w-full overflow-hidden rounded-full bg-slate-200">
+                    <div class="h-full bg-emerald-500 transition-all" style="width: {{ min(100, ($progress['sent'] / $progress['total']) * 100) }}%"></div>
+                </div>
+                <p class="text-xs text-neutral-500">{{ __('Failed: :count', ['count' => $progress['failed']]) }}</p>
             </div>
-            <p class="text-xs text-neutral-500">{{ __('Failed: :count', ['count' => $progress['failed']]) }}</p>
-        </div>
-    @endif
+        @endif
 
     @if ($recentLogs->isNotEmpty())
         <div class="mt-6">

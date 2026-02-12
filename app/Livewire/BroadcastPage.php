@@ -12,6 +12,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -29,6 +30,7 @@ class BroadcastPage extends Component
     public ?string $currentBatchId = null;
     public ?string $scheduledAt = null;
     public ?int $templateId = null;
+    public bool $useContactNames = true;
 
     protected $listeners = [
         'device-created' => '$refresh',
@@ -42,6 +44,7 @@ class BroadcastPage extends Component
             'progress' => $this->progress,
             'recentLogs' => $this->currentBatchId ? $this->batchLogs() : collect(),
             'templates' => $this->templateOptions(),
+            'nameMap' => $this->useContactNames ? $this->recentIncomingNames() : [],
         ]);
     }
 
@@ -79,7 +82,14 @@ class BroadcastPage extends Component
         $batchId = (string) Str::uuid();
         $scheduledAt = $this->parseSchedule($validated['scheduledAt'] ?? null);
 
-        $logIds = $numbers->take(500)->map(function (string $phone) use ($device, $batchId, $scheduledAt) {
+        $nameMap = $this->useContactNames ? $this->recentIncomingNames() : [];
+        $logIds = $numbers->take(500)->map(function (string $phone) use ($device, $batchId, $scheduledAt, $nameMap) {
+            $payload = array_filter([
+                'broadcast' => true,
+                'template_id' => $this->templateId,
+                'contact_name' => $nameMap[$phone] ?? null,
+            ]);
+
             return MessageLog::create([
                 'user_id' => $device->user_id,
                 'whatsapp_device_id' => $device->id,
@@ -87,12 +97,9 @@ class BroadcastPage extends Component
                 'direction' => MessageLog::DIRECTION_OUTGOING,
                 'type' => MessageLog::TYPE_TEXT,
                 'phone' => $phone,
-                'message' => $this->message,
+                'message' => $this->renderMessageWithName($this->message, $nameMap[$phone] ?? null, $phone),
                 'status' => $scheduledAt ? MessageLog::STATUS_SCHEDULED : MessageLog::STATUS_PENDING,
-                'raw_payload' => array_filter([
-                    'broadcast' => true,
-                    'template_id' => $this->templateId,
-                ]),
+                'raw_payload' => $payload,
                 'scheduled_at' => $scheduledAt,
             ])->id;
         })->all();
@@ -115,7 +122,12 @@ class BroadcastPage extends Component
     {
         return [
             'deviceId' => ['required', 'integer', 'exists:whatsapp_devices,id'],
-            'message' => ['required', 'string', 'max:1000'],
+            'message' => [
+                Rule::requiredIf(fn () => blank($this->templateId)),
+                'nullable',
+                'string',
+                'max:2000',
+            ],
             'delayMs' => ['required', 'integer', 'min:0', 'max:10000'],
             'upload' => ['required', 'file', 'mimes:csv,txt,xlsx'],
             'scheduledAt' => ['nullable', 'date'],
@@ -339,5 +351,59 @@ class BroadcastPage extends Component
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function recentIncomingNames(): array
+    {
+        $deviceId = $this->deviceId;
+
+        if (! $deviceId) {
+            return [];
+        }
+
+        $rows = MessageLog::query()
+            ->select(['phone', 'raw_payload'])
+            ->where('direction', MessageLog::DIRECTION_INCOMING)
+            ->where('whatsapp_device_id', $deviceId)
+            ->whereNotNull('raw_payload')
+            ->latest()
+            ->limit(300)
+            ->get();
+
+        $map = [];
+
+        foreach ($rows as $row) {
+            $phone = $this->normalizePhone($row->phone);
+            if (! $phone || isset($map[$phone])) {
+                continue;
+            }
+
+            $payload = $row->raw_payload;
+            if (! is_array($payload)) {
+                continue;
+            }
+
+            $name = $payload['push_name'] ?? null;
+
+            if (filled($name)) {
+                $map[$phone] = (string) $name;
+            }
+        }
+
+        return $map;
+    }
+
+    private function renderMessageWithName(string $message, ?string $name, string $fallbackPhone): string
+    {
+        if (blank($message)) {
+            return $message;
+        }
+
+        $replacement = $name ?: $fallbackPhone;
+
+        return str_ireplace(['{name}', '{{name}}'], $replacement, $message);
     }
 }

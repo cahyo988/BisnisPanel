@@ -18,6 +18,7 @@ class AutoReplyManager extends Component
 
     public ?int $ruleId = null;
     public ?int $deviceId = null;
+    public ?int $filterDeviceId = null;
     public string $keyword = '';
     public string $matchMode = 'exact';
     public string $replyType = 'text';
@@ -36,6 +37,7 @@ class AutoReplyManager extends Component
         return view('livewire.auto-reply-manager', [
             'devices' => $this->deviceOptions(),
             'rules' => $this->rulesList(),
+            'groupedRules' => $this->rulesGrouped(),
             'templates' => $this->templateOptions,
         ]);
     }
@@ -278,8 +280,19 @@ class AutoReplyManager extends Component
         return AutoReplyRule::query()
             ->with('device')
             ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
+            ->when($this->filterDeviceId, fn (Builder $builder) => $builder->where('whatsapp_device_id', $this->filterDeviceId))
+            ->orderBy('whatsapp_device_id')
             ->latest()
             ->get();
+    }
+
+    private function rulesGrouped()
+    {
+        $rules = $this->rulesList();
+
+        return $rules->groupBy(function (AutoReplyRule $rule): string {
+            return $rule->device?->name ?? __('Unknown device');
+        });
     }
 
     private function applyUserScope(Builder $builder): Builder
