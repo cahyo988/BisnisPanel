@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "bpanel-wa-gateway",
   "version": "0.1.0",
   "private": true,
@@ -9,6 +9,7 @@
     "dev": "node index.js"
   },
   "dependencies": {
+    "@ryuu-reinzz/button-helper": "^2.2.3",
     "@whiskeysockets/baileys": "^6.7.9",
     "axios": "^1.8.0",
     "dotenv": "^16.4.5",

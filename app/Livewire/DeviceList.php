@@ -27,6 +27,7 @@ class DeviceList extends Component
         'root_text' => '',
         'root_buttons' => [],
     ];
+    public int $editingSessionTimeout = 30;
 
     protected $listeners = [
         'device-created' => '$refresh',
@@ -101,6 +102,7 @@ class DeviceList extends Component
 
         $this->editingMenuDeviceId = $device->id;
         $this->editingMenuForm = $this->menuToForm($menuPayload);
+        $this->editingSessionTimeout = $device->auto_reply_session_timeout ?? 30;
     }
 
     public function saveMenu(): void
@@ -119,10 +121,12 @@ class DeviceList extends Component
 
         $device->update([
             'auto_reply_menu' => $menuPayload,
+            'auto_reply_session_timeout' => max(1, min(1440, $this->editingSessionTimeout)),
         ]);
 
         $this->editingMenuDeviceId = null;
         $this->editingMenuForm = $this->blankMenuForm();
+        $this->editingSessionTimeout = 30;
 
         session()->flash('device_removed', __('Auto reply menu saved.'));
     }
@@ -131,6 +135,7 @@ class DeviceList extends Component
     {
         $this->editingMenuDeviceId = null;
         $this->editingMenuForm = $this->blankMenuForm();
+        $this->editingSessionTimeout = 30;
     }
 
     public function loadDefaultMenu(): void
@@ -462,19 +467,19 @@ class DeviceList extends Component
                 ],
             ],
             'harga' => [
-                'text' => 'Dummy harga: Paket mulai Rp 50.000. Ketik INFO untuk kembali ke menu.',
+                'text' => 'Dummy harga: Paket mulai Rp 50.000.',
             ],
             'topup' => [
-                'text' => 'Dummy topup: Diamond mulai Rp 10.000. Ketik INFO untuk kembali ke menu.',
+                'text' => 'Dummy topup: Diamond mulai Rp 10.000.',
             ],
             'mythic' => [
-                'text' => 'Dummy joki tier Mythic: silakan hubungi admin untuk detail. Ketik INFO untuk menu.',
+                'text' => 'Dummy joki tier Mythic: silakan hubungi admin untuk detail.',
             ],
             'legend' => [
-                'text' => 'Dummy joki tier Legend: silakan hubungi admin untuk detail. Ketik INFO untuk menu.',
+                'text' => 'Dummy joki tier Legend: silakan hubungi admin untuk detail.',
             ],
             'epic' => [
-                'text' => 'Dummy joki tier Epic: silakan hubungi admin untuk detail. Ketik INFO untuk menu.',
+                'text' => 'Dummy joki tier Epic: silakan hubungi admin untuk detail.',
             ],
         ];
     }

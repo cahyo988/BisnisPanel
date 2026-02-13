@@ -7,7 +7,7 @@ start "Laravel Server" php artisan serve
 
 :: Start Queue Worker
 echo Starting Queue Worker...
-start "Queue Worker" php artisan queue:work
+start "Queue Worker" php artisan queue:work --sleep=0
 
 :: Start Frontend (Vite)
 echo Starting Vite...

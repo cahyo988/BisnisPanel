@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\SendMessageJob;
+use App\Models\AutoReplySession;
 use App\Models\MessageLog;
 use App\Models\PanelNotification;
 use App\Models\WhatsAppDevice;
@@ -52,8 +53,7 @@ class BaileysWebhookController extends Controller
         ]);
 
         $incoming = $data['selected_id'] ?? $data['message'] ?? '';
-        $isMenuSelection = in_array($data['type'], ['button', 'list'], true) && filled($data['selected_id'] ?? null);
-        $this->runAutoReplies($device, $incoming, $data['from'], $isMenuSelection);
+        $this->runAutoReplies($device, $incoming, $data['from']);
 
         return response()->json(['status' => 'ok', 'log_id' => $log->id]);
     }
@@ -159,6 +159,8 @@ class BaileysWebhookController extends Controller
         return response()->json(['status' => 'ok', 'log_id' => $log->id]);
     }
 
+    // ─── Auto-Reply Engine (Session-Aware) ──────────────────────────────
+
     private function resolveDevice(?int $deviceId, ?string $phoneNumber): ?WhatsAppDevice
     {
         if (! $deviceId && ! $phoneNumber) {
@@ -175,27 +177,109 @@ class BaileysWebhookController extends Controller
             ->first();
     }
 
-    private function runAutoReplies(WhatsAppDevice $device, string $incoming, string $sender, bool $isMenuSelection): void
+    /**
+     * Session-aware auto-reply engine.
+     *
+     * Flow:
+     *  1. Get or create session for this sender+device
+     *  2. If session is new or expired → send greeting + root menu
+     *  3. If input matches a menu key → navigate (send sub-menu or leaf + back button)
+     *  4. If input matches "info"/"menu" → reset to root menu
+     *  5. If input matches an AutoReplyRule → send rule reply
+     *  6. Otherwise → send fallback (re-show current menu)
+     */
+    private function runAutoReplies(WhatsAppDevice $device, string $incoming, string $sender): void
     {
-        $incomingNormalized = mb_strtolower(trim($incoming));
+        $menu = $device->auto_reply_menu ?? [];
+        $hasMenu = ! empty($menu) && isset($menu['root']);
+        $hasGreeting = filled($device->auto_reply_greeting);
 
-        if (! $isMenuSelection) {
-            if ($this->shouldSendGreeting($device)) {
-                $this->sendGreetingAndMenu($device, $sender);
-                return;
-            }
+        // If device has no menu and no greeting, only check keyword rules
+        if (! $hasMenu && ! $hasGreeting) {
+            $this->tryKeywordRules($device, $incoming, $sender);
+            return;
         }
+
+        $incomingNormalized = mb_strtolower(trim($incoming));
+        $timeoutMinutes = $device->auto_reply_session_timeout ?? 30;
+
+        // Get or create session
+        $session = AutoReplySession::query()
+            ->where('whatsapp_device_id', $device->id)
+            ->where('sender_phone', $sender)
+            ->first();
+
+        // ── New or expired session: send greeting + root menu ──
+        if (! $session || $session->isExpired($timeoutMinutes)) {
+            if ($session) {
+                $session->update([
+                    'greeted' => true,
+                    'current_menu_key' => 'root',
+                    'last_interaction_at' => Carbon::now(),
+                ]);
+            } else {
+                $session = AutoReplySession::create([
+                    'whatsapp_device_id' => $device->id,
+                    'sender_phone' => $sender,
+                    'current_menu_key' => 'root',
+                    'greeted' => true,
+                    'last_interaction_at' => Carbon::now(),
+                ]);
+            }
+
+            $this->sendGreetingAndMenu($device, $sender, $menu);
+            return;
+        }
+
+        // ── Active session: process input ──
+        $session->update(['last_interaction_at' => Carbon::now()]);
 
         if ($incomingNormalized === '') {
             return;
         }
 
-        if (! $isMenuSelection) {
+        // "info" or "menu" → reset to root
+        if (in_array($incomingNormalized, ['info', 'menu'], true)) {
+            $session->update(['current_menu_key' => 'root']);
+            if ($hasMenu) {
+                $this->sendMenuEntry($device, $sender, 'root', $menu);
+            }
             return;
         }
 
-        if ($this->handleMenuFlow($device, $incomingNormalized, $sender)) {
+        // Match input against menu keys
+        if ($hasMenu && array_key_exists($incomingNormalized, $menu)) {
+            $entry = $menu[$incomingNormalized];
+            $hasButtons = ! empty($entry['buttons']);
+
+            $session->update([
+                'current_menu_key' => $hasButtons ? $incomingNormalized : $session->current_menu_key,
+            ]);
+
+            $this->sendMenuEntry($device, $sender, $incomingNormalized, $menu);
             return;
+        }
+
+        // Try keyword-based AutoReplyRules
+        if ($this->tryKeywordRules($device, $incoming, $sender)) {
+            return;
+        }
+
+        // ── Fallback: re-show current menu ──
+        if ($hasMenu) {
+            $this->sendFallback($device, $sender, $session->current_menu_key ?? 'root', $menu);
+        }
+    }
+
+    /**
+     * Try matching against keyword-based AutoReplyRules.
+     */
+    private function tryKeywordRules(WhatsAppDevice $device, string $incoming, string $sender): bool
+    {
+        $incomingNormalized = mb_strtolower(trim($incoming));
+
+        if ($incomingNormalized === '') {
+            return false;
         }
 
         $rule = $device->autoReplyRules()
@@ -210,7 +294,7 @@ class BaileysWebhookController extends Controller
             });
 
         if (! $rule) {
-            return;
+            return false;
         }
 
         $this->sendAutoReply(
@@ -221,14 +305,14 @@ class BaileysWebhookController extends Controller
             [],
             ['auto_reply_rule_id' => $rule->id]
         );
+
+        return true;
     }
 
-    private function shouldSendGreeting(WhatsAppDevice $device): bool
-    {
-        return filled($device->auto_reply_greeting) || ! empty($device->auto_reply_menu);
-    }
-
-    private function sendGreetingAndMenu(WhatsAppDevice $device, string $sender): void
+    /**
+     * Send greeting text + root menu (only on first contact / session reset).
+     */
+    private function sendGreetingAndMenu(WhatsAppDevice $device, string $sender, array $menu): void
     {
         $greeting = $device->auto_reply_greeting;
 
@@ -243,71 +327,119 @@ class BaileysWebhookController extends Controller
             );
         }
 
-        $menu = $device->auto_reply_menu ?? $this->defaultMenu();
         if (! empty($menu) && isset($menu['root'])) {
-            $this->sendDeviceMenu($device, $sender, 'root', $menu, 'info');
+            $this->sendMenuEntry($device, $sender, 'root', $menu);
         }
     }
 
-    private function handleMenuFlow(WhatsAppDevice $device, string $incomingNormalized, string $sender): bool
-    {
-        $keyword = $incomingNormalized;
-        $menu = $device->auto_reply_menu ?? [];
-
-        if (empty($menu)) {
-            return false;
-        }
-
-        if ($keyword === 'info') {
-            return $this->sendDeviceMenu($device, $sender, 'root', $menu, 'info');
-        }
-
-        if (array_key_exists($keyword, $menu)) {
-            return $this->sendDeviceMenu($device, $sender, $keyword, $menu, $keyword);
-        }
-
-        return false;
-    }
-
-    private function sendDeviceMenu(
+    /**
+     * Send a menu entry (either a sub-menu with buttons, or a leaf response with back button).
+     */
+    private function sendMenuEntry(
         WhatsAppDevice $device,
         string $sender,
         string $key,
-        array $menu,
-        string $menuKey
-    ): bool {
+        array $menu
+    ): void {
         $entry = $menu[$key] ?? null;
 
         if (! is_array($entry) || blank($entry['text'] ?? null)) {
-            return false;
+            return;
         }
 
         $buttons = $entry['buttons'] ?? [];
         $text = (string) $entry['text'];
 
         if (is_array($buttons) && count($buttons) > 0) {
+            // ── Menu node with buttons → send interactive buttons ──
+            $buttonCount = count($buttons);
+            $messageType = $buttonCount <= 3 ? MessageLog::TYPE_BUTTON : MessageLog::TYPE_LIST;
+            $payloadType = $buttonCount <= 3 ? 'button' : 'list';
+
             $this->sendAutoReply(
                 $device,
                 $sender,
                 $text,
-                MessageLog::TYPE_LIST,
-                ['type' => 'list', 'buttons' => $buttons],
-                ['auto_reply_menu' => $menuKey, 'buttons' => $buttons]
+                $messageType,
+                ['type' => $payloadType, 'buttons' => $buttons],
+                ['auto_reply_menu' => $key, 'buttons' => $buttons]
             );
 
-            return true;
+            return;
         }
 
+        // ── Leaf node → send text + "↩ Kembali ke Menu" button ──
         $this->sendAutoReply(
             $device,
             $sender,
             $text,
-            MessageLog::TYPE_TEXT,
-            [],
-            ['auto_reply_menu' => $menuKey]
+            MessageLog::TYPE_BUTTON,
+            [
+                'type' => 'button',
+                'buttons' => [
+                    ['id' => 'info', 'text' => '↩ Kembali ke Menu'],
+                ],
+            ],
+            ['auto_reply_menu' => $key]
         );
+    }
 
-        return true;
+    /**
+     * Send a fallback message when user input is not recognized.
+     * Re-shows the current menu level.
+     */
+    private function sendFallback(
+        WhatsAppDevice $device,
+        string $sender,
+        string $currentMenuKey,
+        array $menu
+    ): void {
+        $entry = $menu[$currentMenuKey] ?? $menu['root'] ?? null;
+        $fallbackText = "Maaf, saya tidak mengerti pilihan tersebut.\n\n";
+
+        if (! $entry || blank($entry['text'] ?? null)) {
+            $this->sendAutoReply(
+                $device,
+                $sender,
+                $fallbackText.'Ketik *INFO* untuk melihat menu utama.',
+                MessageLog::TYPE_BUTTON,
+                [
+                    'type' => 'button',
+                    'buttons' => [['id' => 'info', 'text' => '↩ Menu Utama']],
+                ],
+                ['auto_reply_fallback' => true]
+            );
+            return;
+        }
+
+        $buttons = $entry['buttons'] ?? [];
+
+        if (is_array($buttons) && count($buttons) > 0) {
+            $buttonCount = count($buttons);
+            $messageType = $buttonCount <= 3 ? MessageLog::TYPE_BUTTON : MessageLog::TYPE_LIST;
+            $payloadType = $buttonCount <= 3 ? 'button' : 'list';
+
+            $this->sendAutoReply(
+                $device,
+                $sender,
+                $fallbackText.$entry['text'],
+                $messageType,
+                ['type' => $payloadType, 'buttons' => $buttons],
+                ['auto_reply_fallback' => true, 'auto_reply_menu' => $currentMenuKey]
+            );
+        } else {
+            $this->sendAutoReply(
+                $device,
+                $sender,
+                $fallbackText.'Ketik *INFO* untuk melihat menu utama.',
+                MessageLog::TYPE_BUTTON,
+                [
+                    'type' => 'button',
+                    'buttons' => [['id' => 'info', 'text' => '↩ Menu Utama']],
+                ],
+                ['auto_reply_fallback' => true]
+            );
+        }
     }
 
     /**
@@ -333,23 +465,26 @@ class BaileysWebhookController extends Controller
                 ],
             ],
             'harga' => [
-                'text' => 'Dummy harga: Paket mulai Rp 50.000. Ketik INFO untuk kembali ke menu.',
+                'text' => 'Dummy harga: Paket mulai Rp 50.000.',
             ],
             'topup' => [
-                'text' => 'Dummy topup: Diamond mulai Rp 10.000. Ketik INFO untuk kembali ke menu.',
+                'text' => 'Dummy topup: Diamond mulai Rp 10.000.',
             ],
             'mythic' => [
-                'text' => 'Dummy joki tier Mythic: silakan hubungi admin untuk detail. Ketik INFO untuk menu.',
+                'text' => 'Dummy joki tier Mythic: silakan hubungi admin untuk detail.',
             ],
             'legend' => [
-                'text' => 'Dummy joki tier Legend: silakan hubungi admin untuk detail. Ketik INFO untuk menu.',
+                'text' => 'Dummy joki tier Legend: silakan hubungi admin untuk detail.',
             ],
             'epic' => [
-                'text' => 'Dummy joki tier Epic: silakan hubungi admin untuk detail. Ketik INFO untuk menu.',
+                'text' => 'Dummy joki tier Epic: silakan hubungi admin untuk detail.',
             ],
         ];
     }
 
+    /**
+     * Create a message log and dispatch it synchronously for instant delivery.
+     */
     private function sendAutoReply(
         WhatsAppDevice $device,
         string $sender,
@@ -369,6 +504,7 @@ class BaileysWebhookController extends Controller
             'raw_payload' => array_merge(['auto_reply' => true], $rawPayload),
         ]);
 
-        SendMessageJob::dispatch($log->id, $options);
+        // Use dispatchSync for auto-replies to bypass queue and respond instantly
+        SendMessageJob::dispatchSync($log->id, $options);
     }
 }

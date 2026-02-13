@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Models\AutoReplySession;
 use App\Models\MessageLog;
 use App\Models\User;
 use App\Models\WhatsAppDevice;
@@ -95,6 +96,8 @@ class DashboardStats extends Component
                 'description' => 'Incoming device messages captured today.',
                 'trend' => $this->formatTrend($incomingToday, $incomingYesterday),
             ],
+            $this->buildAutoReplySessionsStat($targetUser),
+            $this->buildTopMenuStat($targetUser),
         ];
     }
 
@@ -111,6 +114,76 @@ class DashboardStats extends Component
         if (! $viewer->isAdmin()) {
             $builder->where('user_id', $viewer->id);
         }
+    }
+
+    /**
+     * Build the auto-reply sessions stat.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildAutoReplySessionsStat(?User $targetUser): array
+    {
+        $base = AutoReplySession::query();
+
+        if ($targetUser) {
+            $deviceIds = WhatsAppDevice::query()
+                ->where('user_id', $targetUser->id)
+                ->pluck('id');
+            $base->whereIn('whatsapp_device_id', $deviceIds);
+        } elseif (! auth()->user()->isAdmin()) {
+            $deviceIds = WhatsAppDevice::query()
+                ->where('user_id', auth()->id())
+                ->pluck('id');
+            $base->whereIn('whatsapp_device_id', $deviceIds);
+        }
+
+        $today = (clone $base)->whereDate('last_interaction_at', Carbon::today())->count();
+        $yesterday = (clone $base)->whereDate('last_interaction_at', Carbon::yesterday())->count();
+
+        return [
+            'label' => 'Auto-Reply Sessions',
+            'value' => $today,
+            'description' => 'Unique senders who interacted with auto-reply today.',
+            'trend' => $this->formatTrend($today, $yesterday),
+        ];
+    }
+
+    /**
+     * Build the top menu option stat.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildTopMenuStat(?User $targetUser): array
+    {
+        $base = MessageLog::query()
+            ->where('direction', MessageLog::DIRECTION_OUTGOING)
+            ->whereNotNull('raw_payload')
+            ->whereDate('created_at', Carbon::today());
+
+        $this->applyUserFilter($base, $targetUser);
+
+        $logs = $base->get(['raw_payload']);
+
+        $counts = [];
+        foreach ($logs as $log) {
+            $menuKey = $log->raw_payload['auto_reply_menu'] ?? null;
+            if ($menuKey && $menuKey !== 'info' && ! isset($log->raw_payload['auto_reply_fallback'])) {
+                $counts[$menuKey] = ($counts[$menuKey] ?? 0) + 1;
+            }
+        }
+
+        arsort($counts);
+        $topKey = array_key_first($counts);
+        $topCount = $topKey ? $counts[$topKey] : 0;
+
+        return [
+            'label' => 'Top Menu Option',
+            'value' => $topCount,
+            'description' => $topKey
+                ? sprintf('Most popular: "%s" (%d taps today).', $topKey, $topCount)
+                : 'No menu interactions today.',
+            'trend' => ['direction' => 'neutral', 'value' => 0, 'caption' => __('today')],
+        ];
     }
 
     /**

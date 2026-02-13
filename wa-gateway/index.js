@@ -10,6 +10,7 @@ const {
   fetchLatestBaileysVersion,
   DisconnectReason,
 } = require('@whiskeysockets/baileys');
+const { sendButtons } = require('@ryuu-reinzz/button-helper');
 
 dotenv.config({ path: path.join(__dirname, '.env') });
 
@@ -313,12 +314,38 @@ async function startDeviceSession(deviceId, devicePhone, name) {
 
       let messageType = 'text';
       let text = '';
+      let selectedId = null;
+      let selectedText = null;
 
       const listResponse = message.message.listResponseMessage;
+      const interactiveResponse = message.message.interactiveResponseMessage;
 
-      if (listResponse?.singleSelectReply?.selectedRowId) {
+      if (interactiveResponse) {
+        // Handle nativeFlowMessage button click responses
+        messageType = 'button';
+        try {
+          const nativeFlow = interactiveResponse.nativeFlowResponseMessage;
+          if (nativeFlow?.paramsJson) {
+            const params = JSON.parse(nativeFlow.paramsJson);
+            selectedId = params.id || null;
+            selectedText = interactiveResponse.body?.text || params.id || '';
+            text = selectedId || selectedText || '';
+          } else {
+            text = interactiveResponse.body?.text || '';
+            selectedId = text;
+            selectedText = text;
+          }
+        } catch (parseErr) {
+          text = interactiveResponse.body?.text || '';
+          selectedId = text;
+          selectedText = text;
+          logger.warn({ deviceId, error: parseErr.message }, 'Failed to parse interactive response');
+        }
+      } else if (listResponse?.singleSelectReply?.selectedRowId) {
         messageType = 'list';
-        text = listResponse.title || '';
+        selectedId = listResponse.singleSelectReply.selectedRowId;
+        selectedText = listResponse.title || '';
+        text = selectedId;
       } else if (message.message.conversation) {
         text = message.message.conversation;
       } else if (message.message.extendedTextMessage?.text) {
@@ -345,8 +372,8 @@ async function startDeviceSession(deviceId, devicePhone, name) {
         push_name: message.pushName || null,
         type: messageType,
         message: text,
-        selected_id: listResponse?.singleSelectReply?.selectedRowId || null,
-        selected_text: listResponse?.title || null,
+        selected_id: selectedId,
+        selected_text: selectedText,
       });
 
       logger.info(
@@ -579,6 +606,7 @@ app.post('/messages', requireGatewayToken, async (req, res) => {
 
   try {
     let payload = { text: message || '' };
+    let useHelper = false;
 
     if (normalizedType === 'button' || normalizedType === 'buttons') {
       const resolvedButtons = Array.isArray(buttons)
@@ -590,27 +618,42 @@ app.post('/messages', requireGatewayToken, async (req, res) => {
 
       logger.info(
         { deviceId, to: normalized, buttonCount: resolvedButtons.length, items },
-        'Preparing button message payload'
+        'Preparing interactive button message via sendButtons helper'
       );
 
       if (items.length === 0) {
         return res.status(422).json({ error: 'Buttons payload is required.' });
       }
 
-      payload = {
-        text: message || 'Pilih salah satu opsi:',
-        buttons: items.map((button, index) => {
-          const id = button?.id ?? `option_${index + 1}`;
-          const label = button?.text ?? button?.label ?? String(id);
+      // Use sendButtons from @ryuu-reinzz/button-helper which handles
+      // binary node injection (biz/interactive/native_flow/bot) required
+      // for WhatsApp to render interactive buttons.
+      const buttonItems = items.map((button, index) => ({
+        id: String(button?.id ?? `option_${index + 1}`),
+        text: String(button?.text ?? button?.label ?? button?.id ?? `Option ${index + 1}`),
+      }));
 
-          return {
-            buttonId: String(id),
-            buttonText: { displayText: String(label) },
-            type: 1,
-          };
-        }),
-        headerType: 1,
-      };
+      const result = await sendButtons(sock, jid, {
+        text: message || 'Pilih salah satu opsi:',
+        footer: 'Ketuk salah satu tombol di bawah',
+        buttons: buttonItems,
+      });
+
+      useHelper = true;
+      const messageId = result?.key?.id || null;
+
+      if (logId || messageId) {
+        await sendDeliveryWebhook({
+          log_id: logId || null,
+          message_id: messageId,
+          device_id: deviceId,
+          phone: normalized,
+          status: 'sent',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      return res.json({ status: 'sent', message_id: messageId });
     }
 
     if (normalizedType === 'list') {
@@ -624,36 +667,45 @@ app.post('/messages', requireGatewayToken, async (req, res) => {
         return res.status(422).json({ error: 'Buttons payload is required.' });
       }
 
-      const rows = resolvedButtons.map((button, index) => {
-        const id = button?.id ?? `option_${index + 1}`;
-        const label = button?.text ?? button?.label ?? String(id);
-        const description = button?.description ? String(button.description) : null;
-
-        return {
-          rowId: String(id),
-          title: String(label),
-          ...(description ? { description } : {}),
-        };
-      });
-
       logger.info(
-        { deviceId, to: normalized, rowCount: rows.length, rows },
-        'Preparing list message payload'
+        { deviceId, to: normalized, rowCount: resolvedButtons.length },
+        'Preparing interactive list message via sendButtons helper'
       );
 
-      payload = {
-        text: message || 'Pilih salah satu opsi:',
+      // For lists, use sendButtons with single_select native flow button
+      const sections = [{
         title: 'Menu',
-        footer: 'Silakan pilih salah satu opsi',
-        buttonText: 'Pilih',
-        listType: 1,
-        sections: [
-          {
-            title: 'Menu',
-            rows,
-          },
-        ],
-      };
+        rows: resolvedButtons.map((button, index) => ({
+          title: String(button?.text ?? button?.label ?? `Option ${index + 1}`),
+          id: String(button?.id ?? `option_${index + 1}`),
+          description: button?.description ? String(button.description) : '',
+        })),
+      }];
+
+      const result = await sendButtons(sock, jid, {
+        text: message || 'Pilih salah satu opsi:',
+        footer: 'Pilih dari daftar di bawah',
+        buttons: [{
+          name: 'single_select',
+          buttonParamsJson: JSON.stringify({ title: 'Menu', sections }),
+        }],
+      });
+
+      useHelper = true;
+      const messageId = result?.key?.id || null;
+
+      if (logId || messageId) {
+        await sendDeliveryWebhook({
+          log_id: logId || null,
+          message_id: messageId,
+          device_id: deviceId,
+          phone: normalized,
+          status: 'sent',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      return res.json({ status: 'sent', message_id: messageId });
     }
 
     logger.info(
@@ -661,9 +713,8 @@ app.post('/messages', requireGatewayToken, async (req, res) => {
         deviceId,
         to: normalized,
         payloadType: normalizedType,
-        buttonCount: Array.isArray(payload.buttons) ? payload.buttons.length : 0,
       },
-      'Sending WhatsApp message'
+      'Sending WhatsApp text message'
     );
 
     const response = await sock.sendMessage(jid, payload);

@@ -23,6 +23,7 @@ class WhatsAppDevice extends Model
         'session',
         'auto_reply_greeting',
         'auto_reply_menu',
+        'auto_reply_session_timeout',
         'last_connected_at',
         'last_seen_at',
     ];
@@ -62,6 +63,14 @@ class WhatsAppDevice extends Model
     public function autoReplyRules(): HasMany
     {
         return $this->hasMany(AutoReplyRule::class, 'whatsapp_device_id');
+    }
+
+    /**
+     * @return HasMany<AutoReplySession>
+     */
+    public function autoReplySessions(): HasMany
+    {
+        return $this->hasMany(AutoReplySession::class, 'whatsapp_device_id');
     }
 
     public function isConnected(): bool

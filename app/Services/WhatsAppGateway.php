@@ -28,6 +28,7 @@ class WhatsAppGateway
             'message' => $log->message,
             'log_id' => $log->id,
             'raw_payload' => $log->raw_payload,
+            'buttons' => $log->raw_payload['buttons'] ?? [],
         ], $overrides);
 
         $baseUrl = config('services.whatsapp.base_url');
