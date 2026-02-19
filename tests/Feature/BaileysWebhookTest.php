@@ -47,13 +47,13 @@ it('stores incoming webhook messages and triggers auto replies', function (): vo
         'user_id' => $user->id,
         'whatsapp_device_id' => $device->id,
         'direction' => MessageLog::DIRECTION_INCOMING,
-        'phone' => '+62111111',
+        'phone' => '62111111',
         'status' => MessageLog::STATUS_DELIVERED,
     ]);
 
     $this->assertDatabaseHas('message_logs', [
         'direction' => MessageLog::DIRECTION_OUTGOING,
-        'phone' => '+62111111',
+        'phone' => '62111111',
         'status' => MessageLog::STATUS_PENDING,
     ]);
 
@@ -119,5 +119,32 @@ it('updates delivery status for outgoing logs', function (): void {
     $this->assertDatabaseHas('message_logs', [
         'id' => $log->id,
         'status' => MessageLog::STATUS_DELIVERED,
+    ]);
+});
+
+it('stores selected_text for interactive replies as message body', function (): void {
+    $user = User::factory()->create();
+    $device = WhatsAppDevice::factory()->for($user)->connected()->create();
+
+    $payload = [
+        'device_id' => $device->id,
+        'from' => '+62111112',
+        'type' => 'button',
+        'message' => 'promo',
+        'selected_id' => 'promo',
+        'selected_text' => 'Promo Hari Ini',
+    ];
+
+    $this->postJson('/api/webhooks/baileys/messages', $payload, ['X-Webhook-Token' => 'secret-token'])
+        ->assertOk()
+        ->assertJsonPath('status', 'ok');
+
+    $this->assertDatabaseHas('message_logs', [
+        'user_id' => $user->id,
+        'whatsapp_device_id' => $device->id,
+        'direction' => MessageLog::DIRECTION_INCOMING,
+        'phone' => '62111112',
+        'type' => MessageLog::TYPE_BUTTON,
+        'message' => 'Promo Hari Ini',
     ]);
 });

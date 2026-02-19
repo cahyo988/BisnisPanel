@@ -50,7 +50,7 @@ class AutoReplySession extends Model
     /**
      * Touch the session interaction timestamp and update menu key.
      */
-    public function touch(?string $menuKey = null): bool
+    public function refreshInteraction(?string $menuKey = null): bool
     {
         $data = ['last_interaction_at' => Carbon::now()];
 

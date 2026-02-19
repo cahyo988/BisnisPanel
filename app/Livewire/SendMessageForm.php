@@ -6,6 +6,9 @@ use App\Jobs\SendMessageJob;
 use App\Models\MessageLog;
 use App\Models\MessageTemplate;
 use App\Models\WhatsAppDevice;
+use App\Services\ChannelAccountRegistry;
+use App\Services\ConversationRegistry;
+use App\Support\ContactKeyNormalizer;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -22,13 +25,21 @@ class SendMessageForm extends Component
     use WithFileUploads;
 
     public ?int $deviceId = null;
+
     public string $type = MessageLog::TYPE_TEXT;
+
     public string $phone = '';
+
     public string $message = '';
+
     public ?string $mediaUrl = null;
+
     public $mediaFile;
+
     public ?int $templateId = null;
+
     public ?string $scheduledAt = null;
+
     public bool $useContactNames = true;
 
     public function render(): View
@@ -42,7 +53,7 @@ class SendMessageForm extends Component
         ]);
     }
 
-    public function send(): void
+    public function send(ChannelAccountRegistry $channelAccounts, ConversationRegistry $conversations): void
     {
         $validated = $this->validate($this->rules());
 
@@ -54,6 +65,7 @@ class SendMessageForm extends Component
 
         if ($validated['type'] === MessageLog::TYPE_TEXT && blank($this->message)) {
             $this->addError('message', __('Message body is required.'));
+
             return;
         }
 
@@ -72,7 +84,9 @@ class SendMessageForm extends Component
         $contactName = $this->useContactNames
             ? $this->resolveContactName($device->id, $validated['phone'])
             : null;
-        $this->message = $this->renderMessageWithName($this->message, $contactName, $validated['phone']);
+        $normalizedPhone = $this->normalizePhone($validated['phone']);
+        $this->message = $this->renderMessageWithName($this->message, $contactName, $normalizedPhone);
+        $channelAccount = $channelAccounts->forWhatsAppDevice($device);
 
         $rawPayload = [
             'type' => $validated['type'],
@@ -90,15 +104,19 @@ class SendMessageForm extends Component
 
         $log = MessageLog::create([
             'user_id' => $device->user_id,
+            'channel' => $channelAccount->channel,
+            'channel_account_id' => $channelAccount->id,
             'whatsapp_device_id' => $device->id,
             'direction' => MessageLog::DIRECTION_OUTGOING,
             'type' => $validated['type'],
-            'phone' => $this->normalizePhone($validated['phone']),
+            'phone' => $normalizedPhone,
             'message' => $this->message ?: $validated['mediaUrl'] ?? 'Media message',
             'status' => $scheduledAt ? MessageLog::STATUS_SCHEDULED : MessageLog::STATUS_PENDING,
             'raw_payload' => $rawPayload,
             'scheduled_at' => $scheduledAt,
         ]);
+
+        $conversations->assign($log, $channelAccount, $normalizedPhone, $contactName);
 
         if ($scheduledAt && $scheduledAt->isFuture()) {
             SendMessageJob::dispatch($log->id)->delay($scheduledAt);
@@ -238,11 +256,18 @@ class SendMessageForm extends Component
         }
 
         $normalized = $this->normalizePhone($phone);
+        $canonical = ContactKeyNormalizer::normalizeWhatsApp($normalized);
 
         $log = MessageLog::query()
             ->where('direction', MessageLog::DIRECTION_INCOMING)
             ->where('whatsapp_device_id', $deviceId)
-            ->where('phone', $normalized)
+            ->where(function (Builder $builder) use ($normalized, $canonical): void {
+                $builder->where('phone', $normalized);
+
+                if (filled($canonical)) {
+                    $builder->orWhere('phone', $canonical);
+                }
+            })
             ->latest()
             ->first();
 

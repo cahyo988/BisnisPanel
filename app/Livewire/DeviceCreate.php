@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\User;
 use App\Models\WhatsAppDevice;
+use App\Services\ChannelAccountRegistry;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Validation\Rule;
@@ -15,9 +16,13 @@ class DeviceCreate extends Component
     use AuthorizesRequests;
 
     public string $name = '';
+
     public string $phone_number = '';
+
     public ?string $session = null;
+
     public ?int $selectedUserId = null;
+
     public string $autoReplyGreeting = '';
 
     public function mount(): void
@@ -34,7 +39,7 @@ class DeviceCreate extends Component
         ]);
     }
 
-    public function save(): void
+    public function save(ChannelAccountRegistry $channelAccounts): void
     {
         $validated = $this->validate($this->rules());
 
@@ -56,6 +61,8 @@ class DeviceCreate extends Component
             'auto_reply_menu' => $this->defaultMenu(),
         ]);
 
+        $channelAccounts->forWhatsAppDevice($device);
+
         $this->dispatch('device-created', deviceId: $device->id);
 
         $this->reset(['name', 'phone_number', 'session', 'autoReplyGreeting']);
@@ -65,6 +72,8 @@ class DeviceCreate extends Component
         }
 
         session()->flash('device_created', 'Device created successfully.');
+
+        $this->dispatch('close-modal', 'add-whatsapp-device');
     }
 
     protected function rules(): array

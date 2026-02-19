@@ -8,9 +8,9 @@ use Symfony\Component\HttpFoundation\Response;
 
 class VerifyWebhookSignature
 {
-    public function handle(Request $request, Closure $next): Response
+    public function handle(Request $request, Closure $next, string $service = 'whatsapp'): Response
     {
-        $expectedToken = config('services.whatsapp.webhook_token');
+        $expectedToken = config(sprintf('services.%s.webhook_token', $service));
 
         if ($expectedToken && ! hash_equals($expectedToken, (string) $this->extractToken($request))) {
             abort(Response::HTTP_UNAUTHORIZED, 'Invalid webhook token.');
@@ -24,4 +24,3 @@ class VerifyWebhookSignature
         return $request->header('X-Webhook-Token') ?? $request->header('X-Baileys-Token') ?? $request->input('token');
     }
 }
-

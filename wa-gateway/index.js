@@ -172,6 +172,110 @@ function resolveSenderNumber(message) {
   return normalizePhone(parsePhone(senderJid));
 }
 
+function resolveQuotedMessageType(quotedMessage) {
+  if (!quotedMessage || typeof quotedMessage !== 'object') {
+    return null;
+  }
+
+  if (quotedMessage.conversation || quotedMessage.extendedTextMessage?.text) {
+    return 'text';
+  }
+
+  if (quotedMessage.imageMessage) {
+    return 'image';
+  }
+
+  if (quotedMessage.documentMessage) {
+    return 'document';
+  }
+
+  if (quotedMessage.buttonsResponseMessage || quotedMessage.interactiveResponseMessage) {
+    return 'button';
+  }
+
+  if (quotedMessage.listResponseMessage) {
+    return 'list';
+  }
+
+  return null;
+}
+
+function resolveQuotedMessageText(quotedMessage) {
+  if (!quotedMessage || typeof quotedMessage !== 'object') {
+    return '';
+  }
+
+  if (quotedMessage.conversation) {
+    return quotedMessage.conversation;
+  }
+
+  if (quotedMessage.extendedTextMessage?.text) {
+    return quotedMessage.extendedTextMessage.text;
+  }
+
+  if (quotedMessage.imageMessage?.caption) {
+    return quotedMessage.imageMessage.caption;
+  }
+
+  if (quotedMessage.documentMessage?.caption) {
+    return quotedMessage.documentMessage.caption;
+  }
+
+  if (quotedMessage.buttonsResponseMessage) {
+    return (
+      quotedMessage.buttonsResponseMessage.selectedDisplayText ||
+      quotedMessage.buttonsResponseMessage.selectedButtonId ||
+      ''
+    );
+  }
+
+  if (quotedMessage.listResponseMessage) {
+    return (
+      quotedMessage.listResponseMessage.title ||
+      quotedMessage.listResponseMessage.singleSelectReply?.selectedRowId ||
+      ''
+    );
+  }
+
+  if (quotedMessage.interactiveResponseMessage?.body?.text) {
+    return quotedMessage.interactiveResponseMessage.body.text;
+  }
+
+  return '';
+}
+
+function resolveMessageContextInfo(message) {
+  return (
+    message?.message?.extendedTextMessage?.contextInfo ||
+    message?.message?.imageMessage?.contextInfo ||
+    message?.message?.documentMessage?.contextInfo ||
+    message?.message?.videoMessage?.contextInfo ||
+    message?.message?.audioMessage?.contextInfo ||
+    message?.message?.stickerMessage?.contextInfo ||
+    message?.message?.buttonsResponseMessage?.contextInfo ||
+    message?.message?.listResponseMessage?.contextInfo ||
+    message?.message?.interactiveResponseMessage?.contextInfo ||
+    null
+  );
+}
+
+function extractReplyContext(message) {
+  const contextInfo = resolveMessageContextInfo(message);
+
+  if (!contextInfo?.quotedMessage) {
+    return null;
+  }
+
+  const quotedParticipant = normalizePhone(parsePhone(contextInfo.participant || ''));
+
+  return {
+    message_id: contextInfo.stanzaId || null,
+    from: quotedParticipant,
+    text: resolveQuotedMessageText(contextInfo.quotedMessage) || null,
+    type: resolveQuotedMessageType(contextInfo.quotedMessage),
+  };
+}
+
 async function sendDeviceWebhook(payload) {
   if (!WEBHOOK_TOKEN) {
     logger.warn('WHATSAPP_WEBHOOK_TOKEN is empty; device webhook skipped');
@@ -311,6 +415,7 @@ async function startDeviceSession(deviceId, devicePhone, name) {
       const senderJid = resolveSenderJid(message);
       const from =
         resolveSenderNumber(message) || normalizePhone(parsePhone(remoteJid)) || normalizePhone(senderJid);
+      const replyTo = extractReplyContext(message);
 
       let messageType = 'text';
       let text = '';
@@ -374,6 +479,7 @@ async function startDeviceSession(deviceId, devicePhone, name) {
         message: text,
         selected_id: selectedId,
         selected_text: selectedText,
+        reply_to: replyTo,
       });
 
       logger.info(

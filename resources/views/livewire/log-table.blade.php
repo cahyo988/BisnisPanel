@@ -5,7 +5,7 @@
             <p class="panel-section-subtitle">{{ __('Consolidated feed of all messaging activity across devices.') }}</p>
         </div>
 
-        <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
             @if ($userOptions->isNotEmpty())
                 <select wire:model.live="selectedUserId" class="panel-select md:w-48">
                     <option value="">{{ __('All users') }}</option>
@@ -19,6 +19,19 @@
                 <option value="all">{{ __('All directions') }}</option>
                 <option value="incoming">{{ __('Incoming') }}</option>
                 <option value="outgoing">{{ __('Outgoing') }}</option>
+            </select>
+
+            <select wire:model.live="channel" class="panel-select md:w-40">
+                <option value="all">{{ __('All channels') }}</option>
+                <option value="whatsapp">{{ __('WhatsApp') }}</option>
+                <option value="telegram">{{ __('Telegram') }}</option>
+            </select>
+
+            <select wire:model.live="selectedChannelAccountId" class="panel-select md:w-48">
+                <option value="">{{ __('All accounts') }}</option>
+                @foreach ($channelAccountOptions as $option)
+                    <option value="{{ $option->id }}">{{ ucfirst($option->channel) }} - {{ $option->name }}</option>
+                @endforeach
             </select>
 
             <select wire:model.live="status" class="panel-select md:w-40">
@@ -42,6 +55,7 @@
                 <thead>
                     <tr>
                         <th>{{ __('Timestamp') }}</th>
+                        <th>{{ __('Channel') }}</th>
                         <th>{{ __('Device') }}</th>
                         <th>{{ __('Phone') }}</th>
                         <th>{{ __('Message') }}</th>
@@ -54,7 +68,10 @@
                     @forelse ($logs as $log)
                         <tr>
                             <td class="text-xs text-[var(--text-muted)]">{{ $log->created_at->format('d M Y - H:i') }}</td>
-                            <td class="font-medium">{{ $log->device->name ?? __('N/A') }}</td>
+                            <td>
+                                <span class="panel-pill bg-slate-100 text-slate-700">{{ ucfirst($log->channel ?: 'whatsapp') }}</span>
+                            </td>
+                            <td class="font-medium">{{ $log->channelAccount->name ?? $log->device->name ?? __('N/A') }}</td>
                             <td class="font-mono text-xs">{{ $log->phone }}</td>
                             <td>
                                 <p class="text-sm text-[var(--text-primary)]">{{ \Illuminate\Support\Str::limit($log->message, 90) }}</p>
@@ -98,7 +115,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7">
+                            <td colspan="8">
                                 <div class="empty-state">
                                     <svg class="mb-3 size-8 text-[var(--text-muted)]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 8.25h18M3 12h18M3 15.75h18" />

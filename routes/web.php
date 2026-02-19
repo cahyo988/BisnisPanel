@@ -1,9 +1,9 @@
 <?php
 
+use App\Http\Controllers\AutomationDocsController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
 use Livewire\Volt\Volt;
-use App\Http\Controllers\AutomationDocsController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -14,6 +14,7 @@ Route::view('dashboard', 'dashboard')
     ->name('dashboard');
 
 Route::middleware(['auth', 'verified'])->group(function () {
+    Route::view('inbox', 'inbox.index')->name('inbox.index');
     Route::view('devices', 'devices.index')->name('devices.index');
     Route::view('messaging', 'messaging.index')->name('messaging.index');
     Route::view('automation', 'automation.index')->name('automation.index');

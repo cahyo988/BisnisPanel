@@ -8,6 +8,7 @@
     @php
         $user = auth()->user();
         $operationLinks = [
+            ['route' => 'inbox.index', 'label' => __('Inbox')],
             ['route' => 'devices.index', 'label' => __('Devices')],
             ['route' => 'messaging.index', 'label' => __('Messaging')],
             ['route' => 'automation.index', 'label' => __('Automation')],

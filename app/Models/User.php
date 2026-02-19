@@ -13,6 +13,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
 class User extends Authenticatable
 {
     public const ROLE_ADMIN = 'admin';
+
     public const ROLE_USER = 'user';
 
     /** @use HasFactory<\Database\Factories\UserFactory> */
@@ -89,6 +90,22 @@ class User extends Authenticatable
     public function whatsappDevices(): HasMany
     {
         return $this->hasMany(WhatsAppDevice::class);
+    }
+
+    /**
+     * @return HasMany<ChannelAccount>
+     */
+    public function channelAccounts(): HasMany
+    {
+        return $this->hasMany(ChannelAccount::class);
+    }
+
+    /**
+     * @return HasMany<Conversation>
+     */
+    public function conversations(): HasMany
+    {
+        return $this->hasMany(Conversation::class);
     }
 
     /**

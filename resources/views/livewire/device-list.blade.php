@@ -33,7 +33,10 @@
 
     <div class="mt-6 space-y-3">
         @forelse ($devices as $device)
-            <div class="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
+            <div class="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                <div class="pointer-events-none absolute inset-y-0 left-0 w-1.5 {{ $device->status === 'connected' ? 'bg-emerald-400' : 'bg-slate-300' }}"></div>
+
+                <div class="ml-3 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <p class="text-base font-semibold text-neutral-900">{{ $device->name }}</p>
                     <p class="text-sm text-neutral-500">{{ $device->phone_number }}</p>
@@ -50,8 +53,8 @@
                     @endif
                 </div>
 
-                <div class="flex flex-wrap gap-3">
-                    <flux:button wire:click="showQr({{ $device->id }})" variant="outline" :disabled="$device->status === 'connected'">{{ __('Show QR') }}</flux:button>
+                <div class="flex flex-wrap gap-2">
+                    <flux:button wire:click="showQr({{ $device->id }})" variant="outline" :disabled="$device->status === 'connected'">{{ __('Pair') }}</flux:button>
                     <flux:button
                         wire:click="disconnect({{ $device->id }})"
                         variant="outline"
@@ -63,6 +66,7 @@
                     <flux:button wire:click="editMenu({{ $device->id }})" variant="outline">{{ __('Menu') }}</flux:button>
                     <flux:button wire:click="remove({{ $device->id }})" variant="danger">{{ __('Remove') }}</flux:button>
                 </div>
+            </div>
             </div>
 
             @if ($editingGreetingDeviceId === $device->id)
@@ -281,7 +285,7 @@
                 </div>
             @endif
         @empty
-            <div class="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-neutral-500">
+            <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-neutral-500">
                 {{ __('No devices found yet.') }}
             </div>
         @endforelse

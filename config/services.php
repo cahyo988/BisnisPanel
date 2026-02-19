@@ -43,4 +43,12 @@ return [
         'connect_timeout' => env('WHATSAPP_HTTP_CONNECT_TIMEOUT', 5),
     ],
 
+    'telegram' => [
+        'base_url' => env('TELEGRAM_GATEWAY_URL'),
+        'token' => env('TELEGRAM_GATEWAY_TOKEN'),
+        'webhook_token' => env('TELEGRAM_WEBHOOK_TOKEN'),
+        'timeout' => env('TELEGRAM_HTTP_TIMEOUT', 10),
+        'connect_timeout' => env('TELEGRAM_HTTP_CONNECT_TIMEOUT', 5),
+    ],
+
 ];

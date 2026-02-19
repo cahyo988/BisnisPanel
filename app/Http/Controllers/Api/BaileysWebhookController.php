@@ -8,6 +8,8 @@ use App\Models\AutoReplySession;
 use App\Models\MessageLog;
 use App\Models\PanelNotification;
 use App\Models\WhatsAppDevice;
+use App\Services\ChannelAccountRegistry;
+use App\Services\ConversationRegistry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -15,6 +17,11 @@ use Illuminate\Validation\Rule;
 
 class BaileysWebhookController extends Controller
 {
+    public function __construct(
+        private readonly ChannelAccountRegistry $channelAccounts,
+        private readonly ConversationRegistry $conversations
+    ) {}
+
     public function incomingMessage(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -26,7 +33,14 @@ class BaileysWebhookController extends Controller
             'push_name' => ['nullable', 'string'],
             'selected_id' => ['nullable', 'string'],
             'selected_text' => ['nullable', 'string'],
+            'reply_to' => ['nullable', 'array'],
+            'reply_to.message_id' => ['nullable', 'string'],
+            'reply_to.from' => ['nullable', 'string'],
+            'reply_to.text' => ['nullable', 'string'],
+            'reply_to.type' => ['nullable', 'string', Rule::in(['text', 'image', 'document', 'button', 'list'])],
         ]);
+
+        $displayMessage = $this->resolveIncomingDisplayMessage($data);
 
         $device = $this->resolveDevice($data['device_id'] ?? null, $data['device_phone'] ?? null);
 
@@ -34,16 +48,29 @@ class BaileysWebhookController extends Controller
             return response()->json(['status' => 'ignored', 'message' => 'Device not found'], 200);
         }
 
+        $channelAccount = $this->channelAccounts->forWhatsAppDevice($device);
+
         $log = MessageLog::create([
             'user_id' => $device->user_id,
+            'channel' => $channelAccount->channel,
+            'channel_account_id' => $channelAccount->id,
             'whatsapp_device_id' => $device->id,
             'direction' => MessageLog::DIRECTION_INCOMING,
             'type' => $data['type'],
             'phone' => $data['from'],
-            'message' => $data['message'] ?? '',
+            'message' => $displayMessage,
             'status' => MessageLog::STATUS_DELIVERED,
-            'raw_payload' => $request->all(),
+            'raw_payload' => array_merge($request->all(), [
+                'reply_to' => $data['reply_to'] ?? null,
+            ]),
         ]);
+
+        $this->conversations->assign(
+            $log,
+            $channelAccount,
+            (string) $data['from'],
+            $data['push_name'] ?? null
+        );
 
         PanelNotification::create([
             'user_id' => $device->user_id,
@@ -56,6 +83,18 @@ class BaileysWebhookController extends Controller
         $this->runAutoReplies($device, $incoming, $data['from']);
 
         return response()->json(['status' => 'ok', 'log_id' => $log->id]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function resolveIncomingDisplayMessage(array $data): string
+    {
+        if (($data['type'] ?? null) === MessageLog::TYPE_BUTTON || ($data['type'] ?? null) === MessageLog::TYPE_LIST) {
+            return (string) ($data['selected_text'] ?? $data['message'] ?? $data['selected_id'] ?? '');
+        }
+
+        return (string) ($data['message'] ?? $data['selected_text'] ?? $data['selected_id'] ?? '');
     }
 
     public function deviceStatus(Request $request): JsonResponse
@@ -152,6 +191,7 @@ class BaileysWebhookController extends Controller
 
         if ($data['message_id'] ?? null) {
             $update['gateway_message_id'] = $data['message_id'];
+            $update['external_message_id'] = $data['message_id'];
         }
 
         $log->update($update);
@@ -197,6 +237,7 @@ class BaileysWebhookController extends Controller
         // If device has no menu and no greeting, only check keyword rules
         if (! $hasMenu && ! $hasGreeting) {
             $this->tryKeywordRules($device, $incoming, $sender);
+
             return;
         }
 
@@ -228,6 +269,7 @@ class BaileysWebhookController extends Controller
             }
 
             $this->sendGreetingAndMenu($device, $sender, $menu);
+
             return;
         }
 
@@ -244,6 +286,7 @@ class BaileysWebhookController extends Controller
             if ($hasMenu) {
                 $this->sendMenuEntry($device, $sender, 'root', $menu);
             }
+
             return;
         }
 
@@ -257,6 +300,7 @@ class BaileysWebhookController extends Controller
             ]);
 
             $this->sendMenuEntry($device, $sender, $incomingNormalized, $menu);
+
             return;
         }
 
@@ -409,6 +453,7 @@ class BaileysWebhookController extends Controller
                 ],
                 ['auto_reply_fallback' => true]
             );
+
             return;
         }
 
@@ -493,8 +538,12 @@ class BaileysWebhookController extends Controller
         array $options = [],
         array $rawPayload = []
     ): void {
+        $channelAccount = $this->channelAccounts->forWhatsAppDevice($device);
+
         $log = MessageLog::create([
             'user_id' => $device->user_id,
+            'channel' => $channelAccount->channel,
+            'channel_account_id' => $channelAccount->id,
             'whatsapp_device_id' => $device->id,
             'direction' => MessageLog::DIRECTION_OUTGOING,
             'type' => $type,
@@ -503,6 +552,8 @@ class BaileysWebhookController extends Controller
             'status' => MessageLog::STATUS_PENDING,
             'raw_payload' => array_merge(['auto_reply' => true], $rawPayload),
         ]);
+
+        $this->conversations->assign($log, $channelAccount, $sender);
 
         // Use dispatchSync for auto-replies to bypass queue and respond instantly
         SendMessageJob::dispatchSync($log->id, $options);

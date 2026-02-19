@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Models\ChannelAccount;
 use App\Models\MessageLog;
 use App\Models\User;
 use App\Services\MessageDispatcher;
@@ -9,8 +10,8 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Log;
-use Livewire\Component;
 use Livewire\Attributes\On;
+use Livewire\Component;
 use Livewire\WithPagination;
 use Throwable;
 
@@ -20,10 +21,18 @@ class LogTable extends Component
     use WithPagination;
 
     public string $status = 'all';
+
     public string $direction = 'all';
+
+    public string $channel = 'all';
+
     public string $search = '';
+
     public int $perPage = 10;
+
     public ?int $selectedUserId = null;
+
+    public ?int $selectedChannelAccountId = null;
 
     protected $listeners = [
         'message-sent' => '$refresh',
@@ -48,12 +57,23 @@ class LogTable extends Component
         $this->resetPage();
     }
 
+    public function updatingChannel(): void
+    {
+        $this->selectedChannelAccountId = null;
+        $this->resetPage();
+    }
+
     public function updatingSearch(): void
     {
         $this->resetPage();
     }
 
     public function updatingSelectedUserId(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingSelectedChannelAccountId(): void
     {
         $this->resetPage();
     }
@@ -65,6 +85,7 @@ class LogTable extends Component
             'userOptions' => auth()->user()->isAdmin()
                 ? User::query()->orderBy('name')->get(['id', 'name'])
                 : collect(),
+            'channelAccountOptions' => $this->channelAccountOptions(),
         ]);
     }
 
@@ -120,10 +141,12 @@ class LogTable extends Component
     private function logs()
     {
         return MessageLog::query()
-            ->with('device:id,name')
+            ->with(['device:id,name', 'channelAccount:id,name,channel'])
             ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
             ->when($this->status !== 'all', fn (Builder $query) => $query->where('status', $this->status))
             ->when($this->direction !== 'all', fn (Builder $query) => $query->where('direction', $this->direction))
+            ->when($this->channel !== 'all', fn (Builder $query) => $query->where('channel', $this->channel))
+            ->when($this->selectedChannelAccountId, fn (Builder $query) => $query->where('channel_account_id', $this->selectedChannelAccountId))
             ->when($this->search, function (Builder $query) {
                 $query->where(function (Builder $builder) {
                     $builder->where('phone', 'like', '%'.$this->search.'%')
@@ -132,6 +155,17 @@ class LogTable extends Component
             })
             ->orderByDesc('created_at')
             ->paginate($this->perPage);
+    }
+
+    private function channelAccountOptions()
+    {
+        return ChannelAccount::query()
+            ->select(['id', 'name', 'channel'])
+            ->tap(fn (Builder $builder) => $this->applyUserScope($builder))
+            ->when($this->channel !== 'all', fn (Builder $builder) => $builder->where('channel', $this->channel))
+            ->orderBy('channel')
+            ->orderBy('name')
+            ->get();
     }
 
     private function applyUserScope(Builder $builder): Builder

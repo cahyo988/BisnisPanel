@@ -6,12 +6,14 @@ use App\Jobs\ProcessBroadcastJob;
 use App\Models\MessageLog;
 use App\Models\MessageTemplate;
 use App\Models\WhatsAppDevice;
+use App\Services\ChannelAccountRegistry;
+use App\Services\ConversationRegistry;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Str;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\On;
 use Livewire\Component;
@@ -24,12 +26,19 @@ class BroadcastPage extends Component
     use WithFileUploads;
 
     public ?int $deviceId = null;
+
     public string $message = '';
+
     public int $delayMs = 1500;
+
     public $upload;
+
     public ?string $currentBatchId = null;
+
     public ?string $scheduledAt = null;
+
     public ?int $templateId = null;
+
     public bool $useContactNames = true;
 
     protected $listeners = [
@@ -48,7 +57,7 @@ class BroadcastPage extends Component
         ]);
     }
 
-    public function start(): void
+    public function start(ChannelAccountRegistry $channelAccounts, ConversationRegistry $conversations): void
     {
         $validated = $this->validate($this->rules());
 
@@ -58,6 +67,7 @@ class BroadcastPage extends Component
 
         if (blank($this->message)) {
             $this->addError('message', __('Message body is required.'));
+
             return;
         }
 
@@ -78,20 +88,23 @@ class BroadcastPage extends Component
             ->findOrFail($validated['deviceId']);
 
         $this->authorize('view', $device);
+        $channelAccount = $channelAccounts->forWhatsAppDevice($device);
 
         $batchId = (string) Str::uuid();
         $scheduledAt = $this->parseSchedule($validated['scheduledAt'] ?? null);
 
         $nameMap = $this->useContactNames ? $this->recentIncomingNames() : [];
-        $logIds = $numbers->take(500)->map(function (string $phone) use ($device, $batchId, $scheduledAt, $nameMap) {
+        $logIds = $numbers->take(500)->map(function (string $phone) use ($device, $batchId, $scheduledAt, $nameMap, $channelAccount, $conversations) {
             $payload = array_filter([
                 'broadcast' => true,
                 'template_id' => $this->templateId,
                 'contact_name' => $nameMap[$phone] ?? null,
             ]);
 
-            return MessageLog::create([
+            $log = MessageLog::create([
                 'user_id' => $device->user_id,
+                'channel' => $channelAccount->channel,
+                'channel_account_id' => $channelAccount->id,
                 'whatsapp_device_id' => $device->id,
                 'batch_id' => $batchId,
                 'direction' => MessageLog::DIRECTION_OUTGOING,
@@ -101,7 +114,11 @@ class BroadcastPage extends Component
                 'status' => $scheduledAt ? MessageLog::STATUS_SCHEDULED : MessageLog::STATUS_PENDING,
                 'raw_payload' => $payload,
                 'scheduled_at' => $scheduledAt,
-            ])->id;
+            ]);
+
+            $conversations->assign($log, $channelAccount, $phone, $nameMap[$phone] ?? null);
+
+            return $log->id;
         })->all();
 
         if ($scheduledAt && $scheduledAt->isFuture()) {
@@ -201,7 +218,7 @@ class BroadcastPage extends Component
 
     private function extractFromExcel(string $path): array
     {
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         $numbers = [];
 
         if ($zip->open($path) !== true) {
